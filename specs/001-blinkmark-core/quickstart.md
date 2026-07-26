@@ -46,6 +46,9 @@ Set `Sign in audience` to **single tenant** on both. This is the cheapest possib
 FR-002 — a multi-tenant registration would accept tokens from other organizations and put the
 entire burden on application code.
 
+Neither registration may hold a client secret or certificate. The API's ability to perform the
+On-Behalf-Of exchange comes from a federated identity credential backed by the managed identity.
+
 ### Run
 
 ```powershell
@@ -100,13 +103,20 @@ Run these before believing anything works:
 
 ## Deploy
 
+**Target**: subscription `46a174f6-0602-4df8-9fb0-f8e8248bcb8f` ("Commerce AI Assistant"),
+resource group `rg-blinkmark`, region `eastus`, tenant `72f988bf-86f1-41af-91ab-2d7cd011db47`.
+
 ```powershell
 azd auth login
+azd env set AZURE_SUBSCRIPTION_ID 46a174f6-0602-4df8-9fb0-f8e8248bcb8f
+azd env set AZURE_RESOURCE_GROUP rg-blinkmark
+azd env set AZURE_LOCATION eastus
 azd up
 ```
 
-Provisions two storage accounts, Cosmos serverless, Redis Basic C0, Container Apps, Static Web
-Apps, Key Vault, and App Insights.
+Provisions two storage accounts, Cosmos serverless, Redis Basic C0, Container Apps in a VNet,
+Static Web Apps, Key Vault, App Insights, a user-assigned managed identity, and private endpoints
+for every data service.
 
 ### Deployment gotchas
 
@@ -122,6 +132,38 @@ Apps, Key Vault, and App Insights.
 - **Redis Basic C0 has no SLA and restarts without warning.** That is expected and acceptable: it
   holds only presence, rate-limit counters, and a quota cache. Confirm the app degrades quietly
   when you stop it (FR-069).
+
+---
+
+## SFI: there are no secrets, and that is load-bearing
+
+Constitution Principle VII forbids service credentials outright. Local authentication is disabled
+**at the resource**, not merely unused, so the usual fallbacks do not exist and are not meant to.
+
+| Service | What is disabled | How the app authenticates |
+|---|---|---|
+| Storage (both accounts) | `allowSharedKeyAccess: false` | Managed identity + data-plane RBAC |
+| Cosmos DB | `disableLocalAuth: true` | Managed identity + Built-in Data Contributor |
+| Redis | `disableAccessKeyAuthentication: true` | Managed identity + Entra auth |
+| Key Vault | Access policies (RBAC only) | Managed identity + Crypto User |
+| App Insights / Log Analytics | `DisableLocalAuth: true` | Managed identity |
+| Entra app registrations | Client secrets and certificates | Federated identity credential backed by the managed identity |
+| CI/CD | Service principal secrets, SWA deployment tokens | Workload identity federation |
+
+**If you find yourself looking for a connection string, stop.** There isn't one, and adding one
+fails the CI SFI gate. Use `DefaultAzureCredential` everywhere.
+
+**On-Behalf-Of works without a client secret.** OBO normally needs one; here the API presents a
+token for its own managed identity as a client assertion via a federated identity credential on
+the app registration. An `AADSTS7000215` invalid-client-secret error means the federated credential
+is misconfigured — do not "temporarily" add a secret to unblock yourself.
+
+**The preview-token signing key never leaves Key Vault.** It is a Key Vault *key*, not a secret,
+and signing happens through the Key Vault sign operation. There is no key material to retrieve.
+
+**Local development uses emulators, not cloud resources.** Private endpoints mean your workstation
+cannot reach the deployed data services, by design. `docker compose up` gives you Redis, Azurite,
+and the Cosmos emulator. No developer needs data-plane access to a deployed environment.
 
 ---
 

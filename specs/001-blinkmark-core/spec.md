@@ -40,18 +40,18 @@ A person has an HTML or Markdown draft — a report, a design doc, a generated p
 
 ### User Story 2 - Comment on a specific passage (Priority: P2)
 
-A reviewer opens a shared draft, highlights a sentence that reads badly or draws a box around a chart that looks wrong, and types a comment. The comment stays visibly pinned to that exact passage. Other reviewers open the same link and see the highlight and the comment in place, and can reply. When the author uploads a corrected version, comments whose text still exists stay attached; comments whose text was deleted are shown separately as orphaned, with the original quoted passage preserved so nothing is silently lost.
+A reviewer opens a shared draft, highlights a sentence that reads badly or draws a box around a chart that looks wrong, and types a comment. The comment stays visibly pinned to that exact passage. Other reviewers open the same link and see the highlight and the comment in place, and can reply. Anchors are matched against the document's content rather than its layout, so they survive re-rendering; and on the rare occasion an anchor cannot be found at all, the comment is shown separately as orphaned with the original quoted passage preserved, so nothing is silently lost.
 
 **Why this priority**: This is the differentiating capability, but it depends entirely on US1 being in place. It converts BlinkMark from a file viewer into a review tool.
 
-**Independent Test**: Open a shared file, select a text range, add a comment, reload in a different session and confirm the comment appears anchored to the same text; then delete that text from the source, re-upload, and confirm the comment surfaces as orphaned with its quoted context rather than disappearing or moving.
+**Independent Test**: Open a shared file, select a text range, add a comment, reload in a different session and confirm the comment appears anchored to the same text; then present the same comment against a render in which its passage cannot be located, and confirm it surfaces as orphaned with its quoted context rather than disappearing or moving.
 
 **Acceptance Scenarios**:
 
 1. **Given** a previewed file, **When** a user selects a text range and submits a comment, **Then** the comment is saved with an anchor derived from the selected content and appears highlighted in place.
 2. **Given** a previewed file, **When** a user drags a region selection over a non-text area, **Then** a comment can be attached to that region.
 3. **Given** an existing comment, **When** a second user opens the same file, **Then** they see the comment at the same anchor position and can reply to it.
-4. **Given** a comment whose anchored text no longer exists in the content, **When** the file is previewed, **Then** the comment is listed as orphaned together with the original quoted text, and is not attached to any other passage.
+4. **Given** a comment whose anchored passage cannot be located in the current render of the file, **When** the file is previewed, **Then** the comment is listed as orphaned together with the original quoted text, and is not attached to any other passage.
 5. **Given** a comment submission, **When** the client supplies an author identity different from the signed-in user, **Then** the system records the signed-in user as author and ignores the supplied value.
 6. **Given** comment text containing markup, **When** it is displayed, **Then** it renders as literal text and does not execute.
 7. **Given** a file that is deleted or expires, **When** the deletion completes, **Then** all comments on that file are removed with it.
@@ -192,33 +192,6 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 - **FR-015**: System MUST render Markdown to formatted output including headings, lists, tables, code blocks, and links.
 - **FR-016**: System MUST neutralize references from uploaded content to external network resources, or render them without granting the content access to the viewer's identity.
 
-#### Download
-
-- **FR-071**: System MUST allow a file's owner to download that file.
-- **FR-072**: System MUST refuse download to anyone who is not the file's owner, including an agent acting for a non-owner. Viewers and commenters have preview access only.
-- **FR-073**: A download MUST include the file's comments together with its content, readable outside the product, with each comment's author, time, thread structure, and the passage it was anchored to.
-- **FR-074**: A download MUST include orphaned comments with their original quoted context, so that no comment is lost from the downloaded record.
-- **FR-075**: System MUST make clear to the owner at download time that the downloaded copy is no longer governed by the file's expiry.
-- **FR-076**: System MUST set the expectation in the interface that BlinkMark is temporary working space rather than a system of record, and that content is not backed up or recoverable once lost, deleted, or expired.
-
-#### Accessibility
-
-- **FR-077**: All user-facing flows MUST conform to WCAG 2.1 Level AA.
-- **FR-078**: Users MUST be able to select a passage and attach a comment to it using the keyboard alone, without a pointing device.
-- **FR-079**: System MUST convey a comment's presence, its anchored passage, and its orphaned state to assistive technology, not by visual highlight alone.
-- **FR-080**: System MUST announce presence changes to assistive technology non-disruptively, without moving focus or interrupting the user's current task.
-- **FR-081**: System MUST keep the preview navigable by keyboard, including a reliable way to move focus into and back out of the previewed content.
-- **FR-082**: System MUST provide a non-dragging alternative for any region selection, so that attaching a comment never requires a drag gesture.
-
-#### Usage limits
-
-- **FR-083**: System MUST cap the number of simultaneously live, unexpired files a single user may own.
-- **FR-084**: System MUST refuse an upload that would exceed that cap, and MUST tell the user their current usage and that capacity is restored by deleting a file or letting one expire.
-- **FR-085**: System MUST limit the rate at which a single user may upload files.
-- **FR-086**: System MUST show users their current live-file usage against the cap before they reach it.
-- **FR-087**: System MUST count an upload performed by an agent on a user's behalf against that user's cap and rate limit, so delegation cannot be used to exceed a personal limit.
-- **FR-088**: System MUST restore capacity automatically as files expire, with no administrative intervention required to unblock a user.
-
 #### Commenting
 
 - **FR-017**: Users MUST be able to select a range of text in the preview and attach a comment to it.
@@ -259,7 +232,6 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 - **FR-043**: System MUST retain audit entries independently of the file they describe, so that deleting or expiring a file does not remove its history.
 - **FR-044**: System MUST make audit entries append-only, with no interface that permits application-level modification or deletion.
 - **FR-045**: System MUST exclude file content, comment text, and credentials from operational logs and telemetry.
-- **FR-070**: System MUST keep audit entries retrievable by operators through platform tooling, independently of the product interface. The product MUST NOT expose any interface for reading, querying, or exporting audit entries in this phase, and no user role grants such access.
 
 #### AI agent access
 
@@ -289,10 +261,41 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 - **FR-063**: System MUST represent a person once regardless of how many tabs, windows, or devices they have the file open in.
 - **FR-064**: System MUST disclose presence information only to users authorized to view that file.
 - **FR-065**: System MUST show a viewer who is present by way of an AI agent as the represented user, marked as agent-assisted and distinguishable from a directly present human.
-- **FR-066**: System MUST display an accurate total count when there are more viewers than can be shown individually.
+- **FR-066**: System MUST display an accurate total count when there are more viewers than can be shown individually, naming at most eight and summarizing the remainder.
 - **FR-067**: System MUST treat presence as transient state that is never persisted beyond the viewing session and is discarded when the file is deleted or expires.
 - **FR-068**: System MUST NOT rely on presence as the record of who accessed a file; the audit trail remains the authoritative record.
 - **FR-069**: System MUST continue to serve the file preview and commenting normally if presence information is unavailable or degraded.
+
+#### Audit access
+
+- **FR-070**: System MUST keep audit entries retrievable by operators through platform tooling, independently of the product interface. The product MUST NOT expose any interface for reading, querying, or exporting audit entries in this phase, and no user role grants such access.
+
+#### Download
+
+- **FR-071**: System MUST allow a file's owner to download that file.
+- **FR-072**: System MUST refuse download to anyone who is not the file's owner, including an agent acting for a non-owner. Viewers and commenters have preview access only.
+- **FR-073**: A download MUST include the file's comments together with its content, readable outside the product, with each comment's author, time, thread structure, and the passage it was anchored to. Comments the author deleted are excluded.
+- **FR-074**: A download MUST include orphaned comments with their original quoted context, so that no comment is lost from the downloaded record.
+- **FR-075**: System MUST make clear to the owner at download time that the downloaded copy is no longer governed by the file's expiry.
+- **FR-076**: System MUST set the expectation in the interface that BlinkMark is temporary working space rather than a system of record, and that content is not backed up or recoverable once lost, deleted, or expired.
+
+#### Accessibility
+
+- **FR-077**: All user-facing flows MUST conform to WCAG 2.1 Level AA.
+- **FR-078**: Users MUST be able to select a passage and attach a comment to it using the keyboard alone, without a pointing device.
+- **FR-079**: System MUST convey a comment's presence, its anchored passage, and its orphaned state to assistive technology, not by visual highlight alone.
+- **FR-080**: System MUST announce presence changes to assistive technology non-disruptively, without moving focus or interrupting the user's current task.
+- **FR-081**: System MUST keep the preview navigable by keyboard, including a reliable way to move focus into and back out of the previewed content.
+- **FR-082**: System MUST provide a non-dragging alternative for any region selection, so that attaching a comment never requires a drag gesture.
+
+#### Usage limits
+
+- **FR-083**: System MUST cap the number of simultaneously live, unexpired files a single user may own.
+- **FR-084**: System MUST refuse an upload that would exceed that cap, and MUST tell the user their current usage and that capacity is restored by deleting a file or letting one expire.
+- **FR-085**: System MUST limit the rate at which a single user may upload files.
+- **FR-086**: System MUST show users their current live-file usage against the cap before they reach it.
+- **FR-087**: System MUST count any upload performed by an agent on a user's behalf against that user's cap and rate limit, so delegation cannot be used to exceed a personal limit. Agents cannot upload in this phase, so this requirement governs any future interface that grants them that ability.
+- **FR-088**: System MUST restore capacity automatically as files expire, with no administrative intervention required to unblock a user.
 
 ### Key Entities
 
@@ -340,12 +343,12 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 
 ## Assumptions
 
-- Every user is a member of a single owning organization directory; guest and cross-organization collaboration is out of scope for this feature.
+- Every user is a member of a single owning organization directory; guest and cross-organization collaboration is out of scope for this feature. "Organization" and "tenant" are used interchangeably throughout and both mean the owning Microsoft Entra directory.
 - A file's link is the access grant: any authenticated member of the organization who holds it can view and comment. Per-file access lists, named invitations, "request access" flows, and security-group scoping are out of scope for this feature. Confidentiality within the organization is therefore governed by who the uploader gives the link to.
 - AI agents act only within an active delegated session for a signed-in user. Background, scheduled, and unattended agent work is out of scope for this feature, as is any standing service-level agent identity — the latter would require a constitution amendment.
 - The maximum accepted upload size is 10 MB per file, and supported extensions are `.html`, `.htm`, `.md`, and `.markdown`. These are configurable operational limits rather than product promises.
 - A single file per upload; multi-file bundles, archives, and HTML with local asset dependencies are out of scope for this feature.
-- Files are immutable once uploaded. Producing a corrected draft means uploading a new file; re-anchoring comments across versions is out of scope, and orphan handling covers the case where content is re-uploaded under an existing file.
+- Files are immutable once uploaded. Producing a corrected draft means uploading a new file, which is a new file with its own comments; re-anchoring comments across versions is out of scope. Orphaning is therefore not caused by users editing content — it arises when an anchor cannot be resolved against the render being displayed, principally because the rendering or sanitization behaviour changed between upload and display, or because a passage is too ambiguous to match confidently.
 - Notification delivery uses the organization's existing email and collaboration platform, so no separate messaging subscription or per-message cost is introduced, and no separate recipient address book is maintained.
 - Audit entries are written for compliance but are not readable through the product in this phase. There is no administrator or compliance role, no audit browsing or export interface, and no operational runbook describing retrieval — operational documentation is out of scope for this phase. The audit trail's job here is to exist, be complete, and be tamper-resistant.
 - Download is deliberately owner-only. A downloaded copy leaves the retention perimeter permanently, so restricting it to the one person who already had the content limits fan-out without making the retention promise meaningless. The file format of the downloaded content-plus-comments bundle is an implementation decision for the plan, not a product promise.

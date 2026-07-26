@@ -42,9 +42,10 @@ event: snapshot
 data: {"fileId":"01J...","viewers":[{"userId":"a1b2","displayName":"Dana Reyes","actingAgentId":null,"joinedAt":"2026-07-26T10:04:11Z"},{"userId":"c3d4","displayName":"Sam Okafor","actingAgentId":"contoso-review-agent","joinedAt":"2026-07-26T10:06:02Z"}],"total":2,"displayed":2}
 ```
 
-- `total` is the true count; `displayed` is how many are enumerated in `viewers`. When `total`
-  exceeds the enumeration cap, the client shows the named subset plus an accurate remainder
-  (FR-066).
+- `total` is the true count; `displayed` is how many are enumerated in `viewers`. **The
+  enumeration cap is 8.** Beyond that the client shows the 8 most recently joined viewers by name
+  plus an accurate remainder — "Dana, Sam, and 6 others" (FR-066). `total` remains exact up to the
+  50-viewer accuracy target in SC-021.
 - `actingAgentId` non-null means this person is present by way of an agent and must be rendered
   as agent-assisted, distinguishable from a directly present human (FR-065).
 - A person appears **once** regardless of open tabs or devices, because the Redis key is

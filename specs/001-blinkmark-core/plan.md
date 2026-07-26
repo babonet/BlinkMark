@@ -28,16 +28,20 @@ anchoring, and **MCP over Streamable HTTP with On-Behalf-Of** for agent access, 
 **Storage**: Cosmos DB serverless (working set); Blob Storage with hierarchical namespace (content
 and render artifacts); Table Storage (audit); Redis Basic C0 (transient coordination)
 **Testing**: xUnit with Testcontainers (backend); Vitest and Playwright with axe-core (frontend)
-**Target Platform**: Azure Container Apps (Consumption) and Azure Static Web Apps (Standard),
-single region, locally redundant
+**Target Platform**: Azure Container Apps (Consumption, VNet-integrated) and Azure Static Web Apps
+(Standard), single region, locally redundant. **Deployment target**: subscription
+`46a174f6-0602-4df8-9fb0-f8e8248bcb8f` ("Commerce AI Assistant"), resource group `rg-blinkmark`,
+region `eastus`, tenant `72f988bf-86f1-41af-91ab-2d7cd011db47`
 **Project Type**: Web application — React frontend plus .NET backend
 **Performance Goals**: p95 preview start <1 s; p95 comment create and list <300 ms; p95 upload
 acknowledgement <2 s at 10 MB; presence propagation <5 s
 **Constraints**: 500 concurrent users; stateless horizontally scalable services; content encrypted
 at rest and in transit; no unauthenticated path to any content or metadata; 30-day absolute
-retention ceiling; WCAG 2.1 Level AA; best-effort availability with no DR and no backup
+retention ceiling; WCAG 2.1 Level AA; best-effort availability with no DR and no backup; **no
+local authentication on any resource and no service credentials anywhere (SFI Safe Secrets
+Standard, Principle VII)**
 **Scale/Scope**: 6 user stories, 88 functional requirements, 27 success criteria; ~50 live files
-per user; up to 50 simultaneous viewers per file; target runtime cost ≈ $55–70/month
+per user; up to 50 simultaneous viewers per file; target runtime cost ≈ $95–120/month
 
 ## Constitution Check
 
@@ -47,13 +51,14 @@ per user; up to 50 simultaneous viewers per file; target runtime cost ≈ $55–
 
 | Principle | Gate | Status |
 |---|---|---|
-| I. Tenant-Only Secure Access | Every content path authenticated and authorized server-side; no anonymous access; no long-lived public blob URLs | PASS — single-tenant registration, server-side authorization on every endpoint, preview served through the app rather than by public blob URL |
+| I. Tenant-Only Secure Access | Every content path authenticated and authorized server-side; no anonymous access; no long-lived public blob URLs | PASS — single-tenant registration, server-side authorization on every endpoint, preview authorized by a 15-minute single-file token (research.md R13), no public blob URL |
 | II. Ephemeral by Default | 24 h default, 30-day hard ceiling, platform-enforced deletion, expired reads as deleted | PASS — Set Blob Expiry plus Cosmos TTL; ceiling stored as `maxExpiresAt` data |
 | III. Anchored Comments Must Survive | Content-derived anchors, graceful orphaning, p95 <300 ms | PASS — W3C selectors, explicit `orphaned` state |
 | IV. Untrusted Content Is Never Trusted | Sandboxed isolated origin, server-side sanitization, system-generated names | PASS — dedicated preview hostname, allowlist sanitizer, ULID blob names |
 | V. Auditable and Observable | Structured append-only audit outliving files, correlation IDs, no content in logs | PASS with a caveat — see R8 on Table Storage immutability |
 | VI. Contract-First, Test-Backed Delivery | Contracts before code; mandatory tests for authz, retention, anchoring, sanitization | PASS — contracts in `contracts/`, four mandatory test areas fixed |
-| Platform constraints | Stack fixed by constitution | **1 deviation** — Redis is not a named service. Justified in Complexity Tracking. |
+| VII. Credential-Free by Default | Local auth disabled at every resource; managed identity everywhere; no Entra app secrets; federated deployment identity | PASS — control mapping in research.md R14, verified in CI |
+| Platform constraints | Stack fixed by constitution | **2 deviations** — Redis is not a named service; private endpoints and a VNet are added. Both justified in Complexity Tracking. |
 
 ### Post-design re-evaluation (after Phase 1)
 
@@ -86,6 +91,7 @@ specs/001-blinkmark-core/
 ├── contracts/
 │   ├── openapi.yaml             # REST contract
 │   ├── mcp-tools.json           # Agent capability manifest (FR-052)
+│   ├── preview-origin.md        # Isolated preview host + preview token (Principles I and IV)
 │   └── presence-sse.md         # Presence event stream contract
 ├── checklists/
 │   └── requirements.md          # Spec quality validation
@@ -137,6 +143,10 @@ have genuinely different constraints: `BlinkMark.Api` must stay warm for latency
 session token; `Notifications` scales from zero on queue depth; `Reconciliation` runs on a cron
 schedule. Collapsing them would compromise the isolation Principle IV requires.
 
+The preview service is authorized by a short-lived, single-file preview token rather than by the
+user's session — see [contracts/preview-origin.md](contracts/preview-origin.md) and research.md
+R13. It never receives an Entra access token, a session cookie, or a refresh token.
+
 ## Phase 0 — Research (complete)
 
 12 decisions recorded in [research.md](research.md): presence backplane, anchoring model, preview
@@ -163,6 +173,9 @@ Three findings that changed the design rather than merely confirming it:
   the requirements it satisfies.
 - [contracts/mcp-tools.json](contracts/mcp-tools.json) — agent capability manifest satisfying
   FR-052, including an explicit `notProvided` list explaining what agents deliberately cannot do.
+- [contracts/preview-origin.md](contracts/preview-origin.md) — the isolated preview host, its
+  preview-token authorization, required response headers, and where the `preview` audit entry is
+  written.
 - [contracts/presence-sse.md](contracts/presence-sse.md) — presence event stream, its degradation
   contract, and its accessibility obligations.
 - [quickstart.md](quickstart.md) — developer onboarding with the four verification checks that
@@ -184,6 +197,19 @@ the token. There is no row to forget to revoke, so FR-050 and FR-055 hold by con
 **Agents read the same projection anchors resolve against.** If agent content and anchor content
 diverged, an agent could comment on text no human ever saw.
 
+**The preview origin is authorized by a scoped token, not by the session.** Isolating the preview
+onto its own origin removes the session, but Principle I still demands server-side authorization
+before content is returned. A 15-minute, single-file, single-render token closes that gap — the
+same shape as the SAS the constitution already sanctions — and gives the `preview` audit entry a
+place to be written accurately.
+
+**BlinkMark holds no retrievable secret.** Local auth is disabled at every resource and every
+Azure-to-Azure call uses a user-assigned managed identity (research.md R14). Two consequences are
+easy to miss: the On-Behalf-Of exchange uses a **federated identity credential backed by the
+managed identity** rather than a client secret, without which SFI and agent access would be in
+direct conflict; and the preview-token signing key is a **Key Vault key signed in place**, not a
+secret the application retrieves. There is nothing left to rotate or leak.
+
 ## Complexity Tracking
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
@@ -191,6 +217,7 @@ diverged, an agent could comment on text no human ever saw.
 | Azure Cache for Redis (Basic C0, ~$16/mo) — not named in constitution v1.1.0 | Presence (FR-059–FR-069), distributed rate limiting (FR-054, FR-085), and quota counters (FR-083) all require state shared across API replicas. The constitution's own stateless requirement forbids holding it in-process. | *In-memory state*: prohibited by the constitution and simply wrong under scale-out — replicas would report different viewer lists. *Azure SignalR / Web PubSub Standard*: ~$49/mo, roughly triple, to solve only presence while rate limiting still needs shared state. *Client polling*: meets the 5 s latency target but ~6,000 req/min at 500 users threatens SC-019 and inflates consumption billing. *Cosmos as presence store*: RU pricing for per-viewer heartbeats is the most expensive home for the least valuable data, and FR-067 forbids persisting it. |
 | Four backend deployables rather than one | `Preview` must be a separate origin under Principle IV and must never receive a session token; `Api` must stay warm for SC-002/SC-003; `Notifications` scales from zero on queue depth; `Reconciliation` is cron-scheduled. | A single service would either share the preview origin with the API — defeating Principle IV outright — or force the whole app to stay warm at the cost of the notification and job tiers' scale-to-zero savings. |
 | Two storage accounts | Hierarchical namespace is required for Set Blob Expiry, and HNS accounts do not support the Table and Queue services. | Not a choice. The single-account arrangement implied by the constitution cannot be provisioned. |
+| Private endpoints (×5) and a VNet-integrated Container Apps environment, ~$40–50/mo | `[SFI-NS2.2.1]` Secure PaaS Resources requires public network access disabled on Blob, Table/Queue, Cosmos, Redis, and Key Vault. Constitution v1.2.0 makes this binding. | *Service firewalls with IP allow-lists*: Container Apps Consumption egress IPs are not stable, so this is unreliable and still leaves the data plane internet-reachable. *Service endpoints*: do not remove public reachability, only restrict it. Neither satisfies the KPI. Cost is the price of a non-risk-based corporate control, not an engineering preference. |
 
 ### Constitution amendment recommended
 
@@ -211,8 +238,10 @@ Complexity Tracking entry.
 | Sanitizer upgrade silently invalidates stored anchors | Comments orphan en masse | `renderVersion` pinned per file; upgrades apply to new uploads only |
 | Table Storage immutability is application-enforced, not platform-enforced | Weaker compliance posture than the wording implies | Documented in R8 with a dual-write escalation path; audit account carries a resource lock |
 | Redis Basic C0 has no SLA and restarts without warning | Presence drops | Expected and acceptable — FR-069 requires the product to work without it; verify by stopping Redis |
-| Graph `Mail.Send` application permission can send as any mailbox | Serious over-grant | Application Access Policy scoped to one service mailbox, treated as mandatory before first send |
+| Graph `Mail.Send` application permission can send as any mailbox | Serious over-grant | Application Access Policy scoped to one service mailbox, treated as mandatory before first send; permission granted to the managed identity, not to a secret-bearing app |
 | App Insights ingestion becomes the largest bill line | Cost overrun | Daily cap set at provisioning; audit deliberately not routed there |
+| A future change re-enables local auth on a resource and silently regresses SFI | Compliance regression invisible in review | CI asserts local auth is disabled on every provisioned resource and fails the build, rather than reporting a warning (T129) |
+| Private endpoints break local development and emulator workflows | Developer friction, temptation to re-enable public access | Local development uses emulators over `docker compose`; no developer ever needs data-plane access to a deployed resource |
 
 ## Next Step
 

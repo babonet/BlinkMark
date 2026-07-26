@@ -23,6 +23,9 @@ across API replicas.
 - Redis `SETEX`-style keys give the staleness window (FR-062, SC-018) for free: a heartbeat
   refreshes a per-viewer key with a 60-second TTL, and a viewer who dies simply stops refreshing.
   No tombstones, no cleanup job, no disconnect detection.
+- Entra ID authentication with managed identity is supported on the Basic tier, so the cheapest
+  tier still satisfies the Safe Secrets Standard (R14). Access key authentication is disabled
+  outright.
 - The same Redis instance serves rate limiting (FR-054, FR-085) and quota counters (FR-083),
   which also need cross-replica shared state. One dependency, three jobs.
 - Basic C0 is roughly $16/month, single-node with no SLA. That is consistent with the answer to
@@ -163,6 +166,8 @@ On-Behalf-Of flow so the downstream identity is the user, not the agent.
   code path to get wrong.
 - FR-055 (delegated only, no standing identity, no acting for a signed-out user) falls out
   naturally: OBO requires an inbound user assertion. There is no app-only credential to issue.
+- The API authenticates to Entra for the OBO exchange using a federated identity credential backed
+  by its managed identity, not a client secret — see R14.
 - FR-051's structured content requirement is served by returning the normalized text projection
   plus anchor descriptors from R2 — the same representation the anchoring model already produces.
 
@@ -325,10 +330,119 @@ keyboard path produces identical anchor data to the pointer path rather than a s
 | Key Vault | Standard | ~$0–1 |
 | App Insights | Daily cap set | $0–5 |
 | Entra ID, Graph | Existing licensing | $0 |
-| **Total** | | **≈ $55–70** |
+| **Subtotal** | | **≈ $55–70** |
+| Private endpoints (×5) + VNet | Required by `[SFI-NS2.2.1]` | $40–50 |
+| **Total with SFI network posture** | | **≈ $95–120** |
 
-Redis is the delta against the ~$35–55 estimate that informed constitution v1.1.0. It is
-recorded in the plan's Complexity Tracking table with its justification.
+Redis is the delta against the ~$35–55 estimate that informed constitution v1.1.0. The private
+endpoint and VNet requirement is the delta introduced by constitution v1.2.0. Both are recorded in
+the plan's Complexity Tracking table with their justification.
+
+---
+
+## R13. Preview origin authorization
+
+**Decision**: The API mints a **short-lived, user-scoped, single-file preview token** (signed JWT,
+15-minute ceiling, audience pinned to the preview host, carrying `sub`, optional `agt`, `fid`,
+`renderVersion`, and the correlation ID). The preview host validates that token and nothing else.
+It never receives an Entra access token, a session cookie, or a refresh token.
+
+**Rationale**:
+
+- R3 isolates the preview on its own origin to satisfy Principle IV. That isolation removes the
+  session — but Principle I still requires *every* request that previews a file to be authorized
+  server-side before content is returned. Without an explicit mechanism, the isolated origin would
+  either be unauthenticated (violating Principle I and FR-001) or the design would be incomplete.
+  This decision closes that gap.
+- The document is framed with `sandbox` and **without** `allow-same-origin`, so it renders in an
+  opaque origin: it cannot read or set cookies, cannot use storage, and cannot attach an
+  `Authorization` header to its own document request. The credential must therefore travel in the
+  URL of the initial document fetch. There is no cookie- or header-based alternative that
+  preserves the isolation.
+- This is deliberately the same shape as the "short-lived, user-scoped, read-only SAS (15 minutes
+  maximum)" that the constitution already sanctions for blob access — the same ceiling, the same
+  scoping discipline, applied to a rendered artifact instead of a raw blob.
+- It also resolves an auditing problem. FR-041 lists `view` and `preview` as separate actions
+  because they occur in different services. The preview host can now emit an accurate `preview`
+  entry from the token's `sub`, `agt`, and correlation ID; the API could not, because it cannot
+  know whether an issued token was ever redeemed.
+
+**Mitigations for a credential in a URL**: 15-minute maximum lifetime; scoped to one file and one
+render version; `Referrer-Policy: no-referrer` so it cannot leak onward from within the framed
+content; query strings excluded from access logs and request telemetry; the token grants read of a
+single rendered artifact and confers no ability to comment, delete, extend retention, or
+enumerate. Because the sanitized render contains no external references (FR-016), no subresource
+ever carries the token to a third party.
+
+**Why 15 minutes does not constrain reviewers**: the token gates the document *fetch*, not the
+review session. Once the preview has rendered, nothing re-validates it, and commenting runs
+against the API with the user's ordinary session — so a reviewer may work for hours untouched by
+expiry. Tokens are reusable within their lifetime so ordinary navigation works, and the SPA
+re-mints transparently if a reload happens after expiry. The lifetime limits how long a *leaked
+URL* remains useful; it does not limit the user.
+
+**Alternatives considered**:
+
+- *Cookie scoped to the preview origin*: impossible. A sandboxed frame without `allow-same-origin`
+  has an opaque origin and will not send or accept cookies.
+- *Adding `allow-same-origin` to the sandbox so a cookie works*: rejected outright. Combined with
+  any script capability it collapses the isolation Principle IV exists to create.
+- *Serving preview from the API origin*: rejected — defeats Principle IV entirely.
+- *Direct blob SAS to the browser*: rejected. It would serve the raw upload rather than the
+  sanitized render, bypassing FR-013 and FR-016, and would give no place to emit the audit entry.
+
+Contract: [contracts/preview-origin.md](contracts/preview-origin.md).
+
+---
+
+## R14. SFI Safe Secrets Standard — control mapping
+
+**Decision**: Local authentication is disabled at every resource, all Azure-to-Azure calls use a
+user-assigned managed identity, and no Entra application holds a client secret. Constitution
+Principle VII (v1.2.0) makes this binding.
+
+Mapped against the S360 SFI KPIs that apply to this stack:
+
+| S360 KPI | Applies to | Control |
+|---|---|---|
+| `[SFI-ID4.2.1]` Storage Accounts – Safe Secrets Standard | Both storage accounts | `allowSharedKeyAccess: false`, `defaultToOAuthAuthentication: true`, `allowBlobPublicAccess: false`, `minimumTlsVersion: TLS1_2`. Data-plane RBAC: Storage Blob Data Contributor, Storage Table Data Contributor, Storage Queue Data Message Sender/Processor |
+| `[SFI-ID4.2.3]` Cosmos DB – Safe Secrets Standard | Cosmos serverless | `disableLocalAuth: true`; Cosmos DB Built-in Data Contributor assigned to the managed identity via `sqlRoleAssignments` |
+| `[SFI-ID4.2.7]` Redis Cache – Safe Secrets Standard | Azure Cache for Redis | Entra authentication enabled, `disableAccessKeyAuthentication: true`, Redis Data Owner access policy assigned to the managed identity |
+| `C+E FUN Security P0` – TLS 1.2+ for Azure Cache for Redis | Redis | `minimumTlsVersion: 1.2`, non-TLS port disabled |
+| `[SFI-ID4.1.1]` Entra ID Apps – Safe Secrets Standard | API and SPA registrations | No client secrets, no certificates. See the OBO note below |
+| `[SFI-ID4.1.2]` Service Principal – Safe Secrets Standard | CI/CD | GitHub Actions authenticates by workload identity federation; no service principal secret |
+| `[SFI-NS2.2.1]` Secure PaaS Resources / Restrict Key Vault access | All data services | `publicNetworkAccess: Disabled` plus private endpoints from a VNet-integrated Container Apps environment |
+| `C+E FUN Comp P0` – Key Vault access policies → Azure RBAC | Key Vault | `enableRbacAuthorization: true`; access policies not used |
+| `[PILOT][SFI-vTI5.1.3]` Remove standing human access to Key Vaults | Key Vault | No standing human role assignments; operator access is JIT through PIM |
+| `[SFI-PS4.2.3]` / `[SFI-PS4.9]` CSP adoption and violations | Preview origin, SPA | Already satisfied by R3 and `contracts/preview-origin.md`; add CSP violation reporting |
+| `[SFI-ES3.1.1]` Live Secret Detection, `[SFI-PS3.2]` CodeQL | Repository | Already in T006 |
+
+**The On-Behalf-Of problem, and its solution.** R5 chose On-Behalf-Of for agent access, and OBO
+normally requires the API to present a client credential to Entra — exactly the client secret
+`[SFI-ID4.1.1]` forbids. The resolution is a **federated identity credential on the app
+registration, backed by the API's user-assigned managed identity**: the API obtains a token for
+its own managed identity and presents it as a client assertion. OBO works unchanged, and no
+credential exists to leak or rotate. Without this, SFI compliance and agent access would be in
+direct conflict.
+
+**What remains in Key Vault.** With local auth disabled everywhere, the only key material left is
+the preview-token signing key from R13. Rather than storing it as a secret, it is a **Key Vault
+key**, and the API signs through the Key Vault sign operation using its managed identity. The key
+material never reaches the application. BlinkMark therefore holds no retrievable secret at all.
+
+**Graph mail sending.** The `Mail.Send` application permission is granted to the **managed
+identity's** service principal rather than to a secret-bearing app registration, and remains
+constrained by an Application Access Policy to one service mailbox (R9).
+
+**Deployment identity.** `azd` and GitHub Actions authenticate by workload identity federation.
+No publish profile, no Static Web Apps deployment token, no service principal secret. The Static
+Web App is deployed through its Entra-authenticated deployment path.
+
+**Cost consequence — this is not free.** `[SFI-NS2.2.1]` requires public network access disabled
+on the data services, which means private endpoints and a VNet. Roughly five private endpoints at
+~$7.30/month each, plus a VNet-integrated Container Apps environment, adds **~$40–50/month**. See
+the revised cost model in R12. This is a genuine trade-off: the workload is internal and
+short-lived, but the requirement is not risk-based and is not negotiable at plan level.
 
 ---
 

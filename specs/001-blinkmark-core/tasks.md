@@ -38,6 +38,7 @@ Web application structure per [plan.md](plan.md): `backend/src/`, `backend/tests
 - [ ] T004 [P] Configure linting and formatting in `.editorconfig`, `frontend/.eslintrc.json`, `frontend/.prettierrc`
 - [ ] T005 [P] Create `docker-compose.yml` at repository root with Redis, Azurite, and Cosmos DB emulator for local development
 - [ ] T006 [P] Create CI workflow in `.github/workflows/ci.yml` running build, lint, tests, secret scanning, and dependency vulnerability scanning (constitution Quality Gates)
+- [ ] T134 [P] Add an SFI compliance gate to `.github/workflows/ci.yml` that fails the build if any Bicep template would enable local authentication (shared key, Cosmos local auth, Redis access keys, Log Analytics local auth, Key Vault access policies) or if any connection string, account key, or client secret appears in source, configuration, or pipeline definitions
 
 ---
 
@@ -49,13 +50,18 @@ Web application structure per [plan.md](plan.md): `backend/src/`, `backend/tests
 
 ### Infrastructure as code
 
-- [ ] T007 Create `infra/main.bicep` composing all resource modules with parameters per environment
-- [ ] T008 [P] Create `infra/modules/storage.bicep` provisioning **two** storage accounts — one with hierarchical namespace for blobs, one standard StorageV2 for Table and Queue (they cannot coexist, see research.md R6)
-- [ ] T009 [P] Create `infra/modules/cosmos.bicep` provisioning serverless account with containers `files` (PK `/id`), `comments` (PK `/fileId`), `notifications` (PK `/recipientId`), `userPrefs` (PK `/id`), TTL enabled per data-model.md
-- [ ] T010 [P] Create `infra/modules/redis.bicep` provisioning Azure Cache for Redis Basic C0
-- [ ] T011 [P] Create `infra/modules/container-apps.bicep` with environment plus four apps: `api` (min-replicas 1), `preview` (separate ingress hostname), `notifications` (KEDA queue scaler), `reconciliation` (cron job)
-- [ ] T012 [P] Create `infra/modules/observability.bicep` with Application Insights and an explicit daily ingestion cap
-- [ ] T013 [P] Create `infra/entra/setup-app-registrations.ps1` registering the API and SPA applications as **single-tenant**, exposing scopes `Files.ReadWrite` and `Comments.ReadWrite`
+- [ ] T007 Create `infra/main.bicep` composing all resource modules with parameters per environment, targeting subscription `46a174f6-0602-4df8-9fb0-f8e8248bcb8f`, resource group `rg-blinkmark`, region `eastus`
+- [ ] T129 Create `infra/modules/identity.bicep` provisioning the user-assigned managed identity used by all four Container Apps, and all data-plane role assignments — Storage Blob/Table/Queue Data roles, Cosmos DB Built-in Data Contributor via `sqlRoleAssignments`, Redis Data Owner access policy, Key Vault Crypto User (research.md R14)
+- [ ] T130 Create `infra/modules/network.bicep` provisioning the VNet, subnets, private DNS zones, and private endpoints for both storage accounts, Cosmos, Redis, and Key Vault, with `publicNetworkAccess: Disabled` on each (`[SFI-NS2.2.1]`)
+- [ ] T008 [P] Create `infra/modules/storage.bicep` provisioning **two** storage accounts — one with hierarchical namespace for blobs, one standard StorageV2 for Table and Queue (they cannot coexist, see research.md R6) — with `allowSharedKeyAccess: false`, `defaultToOAuthAuthentication: true`, `allowBlobPublicAccess: false`, `minimumTlsVersion: TLS1_2` (`[SFI-ID4.2.1]`)
+- [ ] T009 [P] Create `infra/modules/cosmos.bicep` provisioning serverless account with `disableLocalAuth: true` and containers `files` (PK `/id`), `comments` (PK `/fileId`), `notifications` (PK `/recipientId`), `userPrefs` (PK `/id`), TTL enabled per data-model.md (`[SFI-ID4.2.3]`)
+- [ ] T010 [P] Create `infra/modules/redis.bicep` provisioning Azure Cache for Redis Basic C0 with Entra authentication enabled, `disableAccessKeyAuthentication: true`, `minimumTlsVersion: 1.2`, and the non-TLS port disabled (`[SFI-ID4.2.7]`, C+E FUN Security P0)
+- [ ] T011 [P] Create `infra/modules/container-apps.bicep` with a VNet-integrated environment plus four apps: `api` (min-replicas 1), `preview` (separate ingress hostname), `notifications` (KEDA queue scaler), `reconciliation` (cron job) — all bound to the user-assigned managed identity, with no `secrets` block
+- [ ] T012 [P] Create `infra/modules/observability.bicep` with Application Insights and Log Analytics, `DisableLocalAuth: true`, Entra-authenticated ingestion, and an explicit daily ingestion cap
+- [ ] T131 [P] Create `infra/modules/keyvault.bicep` with `enableRbacAuthorization: true`, no access policies, no standing human role assignments, holding the preview-token signing **key** (not a secret) for in-place signing (research.md R13, R14)
+- [ ] T013 [P] Create `infra/entra/setup-app-registrations.ps1` registering the API and SPA applications as **single-tenant** with **no client secrets and no certificates**, exposing scopes `Files.ReadWrite` and `Comments.ReadWrite`, and adding a **federated identity credential backed by the user-assigned managed identity** so the API can perform the On-Behalf-Of exchange without a credential (`[SFI-ID4.1.1]`, research.md R14)
+- [ ] T132 [P] Configure GitHub Actions workload identity federation to the target subscription in `.github/workflows/deploy.yml` — no service principal secret, no Static Web Apps deployment token, no publish profile (`[SFI-ID4.1.2]`)
+- [ ] T121 [P] Enforce and verify encryption at rest on both storage accounts and Cosmos, and TLS 1.2+ minimum with HTTPS-only ingress on every service, in `infra/modules/storage.bicep`, `infra/modules/cosmos.bicep`, and `infra/modules/container-apps.bicep` (FR-010)
 
 ### Domain and persistence
 
@@ -64,7 +70,8 @@ Web application structure per [plan.md](plan.md): `backend/src/`, `backend/tests
 - [ ] T016 Implement Cosmos repositories in `backend/src/BlinkMark.Infrastructure/Cosmos/` with per-item TTL and point-read access for files
 - [ ] T017 Implement blob adapter in `backend/src/BlinkMark.Infrastructure/Blob/BlobFileStore.cs` using the Set Blob Expiry API in absolute mode
 - [ ] T018 Implement audit repository in `backend/src/BlinkMark.Infrastructure/Audit/TableAuditStore.cs` exposing **only** `AppendAsync` — no update or delete method may exist
-- [ ] T019 Implement Redis adapter in `backend/src/BlinkMark.Infrastructure/Redis/RedisStore.cs` for presence keys, rate-limit counters, and quota cache
+- [ ] T019 Implement Redis adapter in `backend/src/BlinkMark.Infrastructure/Redis/RedisStore.cs` for presence keys, rate-limit counters, and quota cache, authenticating with Microsoft Entra ID via managed identity (no access key)
+- [ ] T133 Implement preview-token signing through the Key Vault sign operation in `backend/src/BlinkMark.Infrastructure/Crypto/KeyVaultSigner.cs` so the signing key never leaves Key Vault (Principle VII)
 
 ### Cross-cutting
 
@@ -72,9 +79,10 @@ Web application structure per [plan.md](plan.md): `backend/src/`, `backend/tests
 - [ ] T021 Implement authorization policies in `backend/src/BlinkMark.Api/Auth/AuthorizationPolicies.cs` for tenant member, file viewer, and file owner
 - [ ] T022 Implement audit service and correlation ID middleware in `backend/src/BlinkMark.Api/Middleware/` propagating the correlation ID through to storage calls
 - [ ] T023 Implement RFC 9457 problem details handling and log redaction in `backend/src/BlinkMark.Api/Middleware/ErrorHandling.cs`, excluding file content, comment text, and credentials
-- [ ] T024 Wire managed identity and Key Vault configuration in `backend/src/BlinkMark.Api/Program.cs` and `backend/src/BlinkMark.Infrastructure/Configuration/`
+- [ ] T024 Wire managed identity and Key Vault configuration in `backend/src/BlinkMark.Api/Program.cs` and `backend/src/BlinkMark.Infrastructure/Configuration/` using `DefaultAzureCredential` throughout — no connection strings, no account keys, no client secrets in configuration or environment
 - [ ] T025 Create API host skeleton with health endpoint and OpenAPI document generation in `backend/src/BlinkMark.Api/Program.cs`
-- [ ] T026 Create preview host skeleton in `backend/src/BlinkMark.Preview/Program.cs` serving on a separate hostname with `Content-Security-Policy` including `sandbox` and no session cookie access
+- [ ] T118 Implement preview token issuance and validation per `contracts/preview-origin.md` in `backend/src/BlinkMark.Core/Preview/PreviewTokenService.cs` — 15-minute ceiling, audience pinned to the preview host, scoped to one `fileId` and one `renderVersion`, signing key from Key Vault (FR-001, FR-003, Principle I). **Blocks T026 and T039**
+- [ ] T026 Create preview host skeleton in `backend/src/BlinkMark.Preview/Program.cs` validating the preview token as its sole credential, serving on a separate hostname with the response headers required by `contracts/preview-origin.md`, and never accepting a session cookie or Entra token
 - [ ] T027 Create frontend shell with MSAL authentication, routing, and API client in `frontend/src/services/` and `frontend/src/App.tsx`
 
 ### Test infrastructure
@@ -98,6 +106,7 @@ Web application structure per [plan.md](plan.md): `backend/src/`, `backend/tests
 - [ ] T031 [P] [US1] Integration test for authorization denial paths — unauthenticated, cross-tenant, and expired — in `backend/tests/integration/AuthorizationDenialTests.cs`
 - [ ] T032 [P] [US1] Integration test for sanitization against the hostile corpus in `backend/tests/integration/SanitizationTests.cs`
 - [ ] T033 [P] [US1] Integration test for 24-hour default expiry and physical deletion of blob, document, and comments in `backend/tests/integration/RetentionExpiryTests.cs`
+- [ ] T119 [P] [US1] Contract test for the preview origin against `contracts/preview-origin.md` in `backend/tests/contract/PreviewOriginContractTests.cs` — asserting refusal without a token, with an expired token, with a token minted for a different file, and with a token minted for the API audience; and asserting a token is reusable within its lifetime
 
 ### Implementation
 
@@ -106,16 +115,20 @@ Web application structure per [plan.md](plan.md): `backend/src/`, `backend/tests
 - [ ] T036 [P] [US1] Implement Markdown rendering with Markdig (raw HTML disabled) in `backend/src/BlinkMark.Core/Rendering/MarkdownRenderer.cs`
 - [ ] T037 [P] [US1] Implement allowlist HTML sanitization and external reference neutralization with Ganss.Xss in `backend/src/BlinkMark.Core/Rendering/HtmlSanitizerService.cs`
 - [ ] T038 [US1] Generate and store the sanitized render and normalized text projection with a pinned `renderVersion` in `backend/src/BlinkMark.Core/Rendering/RenderPipeline.cs`
-- [ ] T039 [US1] Implement preview serving in `backend/src/BlinkMark.Preview/Endpoints/PreviewEndpoints.cs` returning the stored render artifact with sandbox headers
-- [ ] T040 [US1] Implement `GET /api/files/{fileId}` in `backend/src/BlinkMark.Api/Endpoints/FileEndpoints.cs` returning `previewUrl`, `accessScopeNotice`, and `retentionNotice`
+- [ ] T039 [US1] Implement preview serving in `backend/src/BlinkMark.Preview/Endpoints/PreviewEndpoints.cs` returning the stored render artifact only after preview-token validation, with the headers mandated by `contracts/preview-origin.md`
+- [ ] T040 [US1] Implement `GET /api/files/{fileId}` in `backend/src/BlinkMark.Api/Endpoints/FileEndpoints.cs` returning `previewUrl` carrying a freshly minted preview token, plus `accessScopeNotice` and `retentionNotice`
 - [ ] T041 [US1] Implement `GET /api/files` returning the caller's live files with quota status in `backend/src/BlinkMark.Api/Endpoints/FileEndpoints.cs`
 - [ ] T042 [US1] Implement the expired-reads-as-deleted guard in `backend/src/BlinkMark.Core/Retention/ExpiryGuard.cs` applied to every read path
 - [ ] T043 [US1] Implement live-file quota and upload rate limiting in `backend/src/BlinkMark.Core/Quotas/QuotaService.cs` with Redis counters confirmed against Cosmos before commit
 - [ ] T044 [US1] Implement the reconciliation job purging expired blobs, documents, and comments in `backend/src/BlinkMark.Jobs/Reconciliation/RetentionReconciler.cs`
-- [ ] T045 [US1] Emit audit entries for upload, view, and preview in `backend/src/BlinkMark.Api/Endpoints/FileEndpoints.cs`
+- [ ] T045 [US1] Emit audit entries for upload and view in `backend/src/BlinkMark.Api/Endpoints/FileEndpoints.cs`
+- [ ] T120 [US1] Emit the `preview` audit entry from the preview host using the token's subject, acting agent, and correlation ID, in `backend/src/BlinkMark.Preview/Endpoints/PreviewEndpoints.cs` (FR-041, FR-042)
 - [ ] T046 [P] [US1] Build the upload screen with validation messaging and quota display in `frontend/src/pages/Upload.tsx`
 - [ ] T047 [P] [US1] Build the file list with remaining-time display in `frontend/src/pages/FileList.tsx`
 - [ ] T048 [P] [US1] Build the sandboxed iframe preview host component in `frontend/src/components/preview/PreviewFrame.tsx`
+- [ ] T123 [P] [US1] Implement keyboard focus management for the preview region in `frontend/src/components/preview/PreviewFrame.tsx` — labelled focusable wrapper, a documented key to enter the framed content, `Escape` to return focus, and a skip link past the preview (FR-081)
+- [ ] T127 [US1] Implement transparent preview-token re-minting in `frontend/src/components/preview/PreviewFrame.tsx` — treat a `401` from the preview origin as re-mint-and-retry rather than an error, and pre-emptively re-mint on any frame reload after ten minutes, so tab restore, back-navigation, and network interruption never surface an authentication failure to an authorized reader
+- [ ] T128 [P] [US1] End-to-end test in `frontend/tests/e2e/preview-reload.spec.ts` confirming a preview reloaded after token expiry recovers silently and the reader sees no error
 - [ ] T049 [P] [US1] Add access scope and no-backup notices to the upload flow in `frontend/src/components/upload/ScopeNotice.tsx`
 - [ ] T050 [US1] Run and fix an accessibility pass over the US1 flows in `frontend/tests/a11y/upload-preview.spec.ts`
 
@@ -151,6 +164,7 @@ Web application structure per [plan.md](plan.md): `backend/src/`, `backend/tests
 - [ ] T065 [P] [US2] Build region selection with a non-dragging alternative in `frontend/src/components/comments/RegionSelection.tsx`
 - [ ] T066 [P] [US2] Build the comment sidebar with in-place highlights and a separate orphaned section in `frontend/src/components/comments/CommentSidebar.tsx`
 - [ ] T067 [P] [US2] Render comment bodies as literal text with no markup interpretation in `frontend/src/components/comments/CommentBody.tsx`
+- [ ] T122 [P] [US2] Convey comment presence, anchored passage, and orphaned state to assistive technology in `frontend/src/components/comments/CommentSidebar.tsx` and `frontend/src/components/comments/AnchorHighlight.tsx` — never by visual highlight alone (FR-079)
 
 **Checkpoint**: Review capability complete — BlinkMark is now a review tool, not a viewer
 
@@ -216,7 +230,7 @@ Web application structure per [plan.md](plan.md): `backend/src/`, `backend/tests
 ### Tests (mandatory under Principle VI)
 
 - [ ] T087 [P] [US5] Contract test verifying the served MCP manifest matches `contracts/mcp-tools.json` in `backend/tests/contract/McpManifestContractTests.cs`
-- [ ] T088 [P] [US5] Integration test confirming an agent cannot exceed the represented user's permissions and cannot act for a signed-out user in `backend/tests/integration/AgentAuthorizationTests.cs`
+- [ ] T088 [P] [US5] Integration test confirming an agent cannot exceed the represented user's permissions, cannot act for a signed-out user, and that its actions are distinguishable from direct user actions in the audit trail, in `backend/tests/integration/AgentAuthorizationTests.cs`
 
 ### Implementation
 
@@ -228,6 +242,7 @@ Web application structure per [plan.md](plan.md): `backend/src/`, `backend/tests
 - [ ] T094 [US5] Implement `GET /api/files/{fileId}/content` returning the structured projection in `backend/src/BlinkMark.Api/Endpoints/FileEndpoints.cs`
 - [ ] T095 [US5] Persist `actingAgentId` on comments and surface it in responses in `backend/src/BlinkMark.Infrastructure/Cosmos/CommentRepository.cs`
 - [ ] T096 [US5] Implement agent rate limiting and ensure agent actions count against the represented user's quota in `backend/src/BlinkMark.Core/Quotas/AgentRateLimiter.cs`
+- [ ] T124 [US5] Populate `actingAgentId` on every audit entry written during an agent-initiated request, in `backend/src/BlinkMark.Api/Middleware/AuditMiddleware.cs`, so agent actions are distinguishable from direct user actions (FR-049, SC-015)
 - [ ] T097 [P] [US5] Display agent attribution on comments in `frontend/src/components/comments/AgentBadge.tsx`
 
 **Checkpoint**: Agent access complete and provably no broader than the user
@@ -267,10 +282,13 @@ Web application structure per [plan.md](plan.md): `backend/src/`, `backend/tests
 - [ ] T110 [P] Run a full WCAG 2.1 Level AA audit across every user story flow and record results in `frontend/tests/a11y/full-audit.spec.ts`
 - [ ] T111 [P] Expand the hostile content corpus and verify CSP violation reporting in `backend/tests/fixtures/hostile/` and `backend/tests/integration/SanitizationTests.cs`
 - [ ] T112 [P] Configure Application Insights dashboards and verify the daily ingestion cap is enforced in `infra/modules/observability.bicep`
+- [ ] T125 [P] Stand up continuous synthetic probing for unauthenticated and out-of-tenant access, and schedule the hostile-corpus suite to run on every deployment, in `.github/workflows/continuous-verification.yml` (SC-007, SC-008)
+- [ ] T126 [P] Add an availability probe and monthly availability reporting against the 99.5% target in `infra/modules/observability.bicep` (SC-023)
 - [ ] T113 Apply a resource lock to the audit storage account and add a test asserting no delete or merge operation against the audit table exists in `backend/tests/integration/AuditImmutabilityTests.cs`
 - [ ] T114 [P] Write `README.md` linking the constitution, spec, and quickstart
-- [ ] T115 Validate deployment with `azd up` and run the four verification checks from [quickstart.md](quickstart.md)
-- [ ] T116 Submit a PATCH amendment to `.specify/memory/constitution.md` raising it to v1.1.1, correcting the Static Web Apps preview-origin justification identified in [plan.md](plan.md)
+- [ ] T115 Validate deployment with `azd up` against subscription `46a174f6-0602-4df8-9fb0-f8e8248bcb8f` / `rg-blinkmark` / `eastus`, and run the four verification checks from [quickstart.md](quickstart.md)
+- [ ] T135 Verify SFI posture on the deployed environment: confirm `allowSharedKeyAccess`, Cosmos `disableLocalAuth`, Redis `disableAccessKeyAuthentication`, Log Analytics local auth, Key Vault RBAC mode, and `publicNetworkAccess` on every data service, and record the result in `docs/sfi-attestation.md`
+- [ ] T116 Submit a PATCH amendment to `.specify/memory/constitution.md` raising it to v1.1.1, correcting the Static Web Apps preview-origin justification identified in [plan.md](plan.md) (superseded in part by the v1.2.0 amendment; the SWA justification still needs correcting)
 - [ ] T117 [P] Verify the application degrades quietly with Redis stopped, confirming preview and commenting are unaffected
 
 ---
@@ -312,11 +330,12 @@ Polish (T108–T117)
 
 ### Notable within-story ordering
 
+- **T118 (preview token) blocks T026 and T039** — the preview host has no other credential, so it cannot be built before the token exists
 - T038 (render + projection) blocks T054 (anchor computation) — anchors need the projection to exist
 - T043 (quota) must precede T035 completion — upload enforces the quota
 - T054 (anchor service) blocks T060 (orphan detection) and T062 (client resolution)
 - T100 (presence store) blocks T101–T105
-- T089 (OBO handler) blocks all MCP tools T090–T093
+- T089 (OBO handler) blocks all MCP tools T090–T093, and blocks T124 (agent-attributed audit)
 
 ---
 
@@ -381,6 +400,10 @@ rewriting the US2 interaction model.
 **Do not defer T032 (sanitization tests).** A stored-XSS discovered after the preview component is
 built is a rewrite, not a patch.
 
+**T118 (preview token) comes before any preview code.** The preview origin has no session and no
+other credential; building T026 or T039 first produces an unauthenticated content endpoint, which
+violates Principle I on the most sensitive path in the product.
+
 **Verify T033 deletes physically, not just logically.** A file hidden from the API but still in
 blob storage fails SC-006 and the entire compliance premise.
 
@@ -390,15 +413,19 @@ blob storage fails SC-006 and the entire compliance premise.
 
 | Metric | Value |
 |---|---|
-| Total tasks | 117 |
-| Setup | 6 |
-| Foundational | 23 |
-| US1 (P1, MVP) | 21 |
-| US2 (P2) | 17 |
+| Total tasks | 135 |
+| Setup | 7 |
+| Foundational | 31 |
+| US1 (P1, MVP) | 26 |
+| US2 (P2) | 18 |
 | US3 (P3) | 11 |
 | US4 (P4) | 8 |
-| US5 (P4) | 11 |
+| US5 (P4) | 12 |
 | US6 (P4) | 10 |
-| Polish | 10 |
-| Marked `[P]` | 52 |
-| Mandatory test tasks | 12 |
+| Polish | 13 |
+| Marked `[P]` | 60 |
+| Mandatory test tasks | 13 |
+
+**Tasks T118–T128 were added after the consistency analysis, and T129–T135 after the SFI review.**
+They are numbered above the original sequence so existing IDs stay stable, and sit within the
+phase they belong to rather than at the end.

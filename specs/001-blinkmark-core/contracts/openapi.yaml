@@ -354,7 +354,11 @@ components:
             ownerDisplayName: { type: string }
             previewUrl:
               type: string
-              description: Absolute URL on the isolated preview origin, never the API origin (FR-014).
+              description: >-
+                Absolute URL on the isolated preview origin, never the API origin (FR-014).
+                Carries a short-lived, user-scoped, single-file preview token as its `t` query
+                parameter; the preview host authorizes on that token alone and never sees a
+                session (FR-001, FR-003). Expires within 15 minutes. See contracts/preview-origin.md.
             accessScopeNotice:
               type: string
               description: >-

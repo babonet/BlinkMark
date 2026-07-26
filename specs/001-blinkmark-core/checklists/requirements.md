@@ -158,3 +158,36 @@ requirement granted download at all. Q2 resolved it in favour of adding the capa
 | Misc / placeholders | Clear — no markers remain |
 
 No Outstanding or Deferred categories. Spec is ready for `/speckit.plan`.
+
+### Validation iteration 5 — 2026-07-26 — post-`/speckit.analyze` remediation
+
+Cross-artifact analysis found 16 issues (1 critical, 3 high, 6 medium, 6 low). All were remediated.
+
+| ID | Severity | Issue | Resolution |
+|---|---|---|---|
+| I1 | CRITICAL | Preview host had no defined authorization mechanism, violating Principle I | research.md R13 + new `contracts/preview-origin.md` define a 15-minute, single-file, single-render preview token; T118 added and made a blocker for T026/T039 |
+| C1 | HIGH | Preview endpoint absent from all contracts, violating Principle VI | `contracts/preview-origin.md` created; T119 contract test added |
+| C2 | HIGH | FR-049 / SC-015 agent-distinguished audit had no task | T124 added; T088 extended to assert the distinction |
+| I2 | HIGH | Immutability assumption contradicted US2 scenario 4, its Independent Test, and its narrative | All four reconciled to research.md R2 — orphaning arises from render drift and ambiguous matching, not user edits |
+| I3 | MEDIUM | FR-087 assumed agent upload; MCP manifest omits it | FR-087 reworded as forward-looking |
+| C3 | MEDIUM | FR-010 encryption had no task | T121 added |
+| C4 | MEDIUM | FR-081 preview keyboard focus had no task | T123 added |
+| C5 | MEDIUM | FR-079 comment state to assistive tech had no task | T122 added |
+| C6 | MEDIUM | SC-007/SC-008 required continuous verification; only one-time tests existed | T125 added |
+| I4 | MEDIUM | FR subsections were out of numeric order | Reordered to strict ascending: 001–069, 070, 071–076, 077–082, 083–088. No IDs changed |
+| C7 | LOW | FR-070 operator retrieval | Accepted as inherent; covered by T113 |
+| C8 | LOW | SC-023 availability measurement had no task | T126 added |
+| A1 | LOW | Presence enumeration cap unspecified | Fixed at 8 named viewers in FR-066 and the presence contract |
+| A2 | LOW | Deleted comments in download bundle unspecified | FR-073 now excludes author-deleted comments |
+| I5 | LOW | tasks.md claimed 52 `[P]`, actual 50 | Metrics recomputed and verified: 126 tasks, 56 `[P]`, 0 duplicate IDs |
+| I6 | LOW | "organization" vs "tenant" drift | Assumptions now state the terms are interchangeable |
+
+**Coverage after remediation**: 88 / 88 functional requirements have at least one task. Zero
+critical, high, or medium findings remain.
+
+**Note on the critical finding**: I1 was a genuine design hole, not a documentation gap. Isolating
+the preview onto its own origin to satisfy Principle IV removed the session that Principle I
+relies on, and no artifact replaced it. The two principles were in tension and nothing reconciled
+them. The preview token resolves it using the same shape the constitution already sanctions for
+blob access. It also fixed a second problem nobody had noticed: FR-041 requires auditing `preview`
+separately from `view`, and only the preview host can know whether an issued token was redeemed.

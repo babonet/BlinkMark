@@ -1,37 +1,32 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.0.0 → 1.1.0
-Bump rationale: MINOR — no principle removed or redefined. The Platform and Technology
-Constraints section is materially expanded: the three deferred stack choices are now
-resolved and binding, and the cost-driven service selections behind them are recorded.
+Version change: 1.1.0 → 1.2.0
+Bump rationale: MINOR — a new principle is added (VII. Credential-Free by Default) and the
+Platform and Technology Constraints section is expanded with the deployment target and
+SFI-derived service configuration. No existing principle is removed or redefined.
 
-Modified principles: none (Principles I–VI unchanged in wording and obligation)
+Modified principles:
+  - (new) → VII. Credential-Free by Default (NON-NEGOTIABLE)
+  - I. Tenant-Only Secure Access — final bullet narrowed: managed identity is no longer one
+    acceptable option among several, it is the required mechanism. Obligation strengthened,
+    not redefined.
 
 Modified sections:
-  - Platform and Technology Constraints — frontend, backend, and metadata store
-    decided; compute, purge, audit, notification, secrets, and observability hosting
-    choices added with cost rationale.
-
-Added sections: none
-Removed sections: none
+  - Platform and Technology Constraints — deployment target recorded; per-service local-auth
+    disablement and network posture added.
+  - Quality Gates and Development Workflow — SFI verification added to the merge gate.
 
 Templates requiring updates:
-  - ✅ .specify/templates/plan-template.md — no edit needed; Technical Context now has
-    concrete values to copy from this section.
+  - ✅ .specify/templates/plan-template.md — no edit needed; Constitution Check gate is derived.
   - ✅ .specify/templates/spec-template.md — no edit needed.
   - ✅ .specify/templates/tasks-template.md — no edit needed.
   - ✅ .specify/templates/checklist-template.md — no edit needed.
-  - ⚠ README.md / docs/quickstart.md — do not exist yet; link this constitution when
-    developer-facing docs are added.
 
-Deferred items:
-  - RESOLVED TODO(FRONTEND_FRAMEWORK) → React.
-  - RESOLVED TODO(BACKEND_RUNTIME) → .NET Core.
-  - RESOLVED TODO(DATABASE_ENGINE) → Azure Cosmos DB (serverless).
-  - None outstanding.
+Deferred items: none outstanding.
 
 Prior history:
+  1.1.0 (2026-07-26) — stack deferrals resolved; Azure service selections recorded.
   1.0.0 (2026-07-26) — initial ratification from template; six principles established.
 -->
 
@@ -55,8 +50,7 @@ tenant, and MUST be authorized server-side before any content is returned.
 - Blob content MUST NOT be served by a long-lived public URL. Access is via the API
   or a short-lived, user-scoped, read-only SAS (15 minutes maximum).
 - Files and comments MUST be encrypted at rest and in transit (TLS 1.2+).
-- Secrets, connection strings, and keys MUST come from Azure Key Vault or managed
-  identity. No secrets in source, config files, or environment defaults.
+- Service credentials MUST be managed identities. See Principle VII.
 
 Rationale: BlinkMark holds unpublished internal drafts. A single unauthenticated path
 leaks the entire value of the product.
@@ -147,6 +141,36 @@ declares non-negotiable MUST be covered by automated tests.
 Rationale: These four areas are exactly where a regression is invisible in manual
 testing and catastrophic in production.
 
+### VII. Credential-Free by Default (NON-NEGOTIABLE)
+
+BlinkMark holds no service credentials. Every Azure-to-Azure call is authenticated by
+managed identity, and local authentication is disabled on every service that supports
+disabling it. This implements the Secure Future Initiative Safe Secrets Standard.
+
+- Local authentication MUST be **disabled at the resource**, not merely unused by the
+  application. Specifically: shared key access off on storage accounts, local auth off on
+  Cosmos DB, access key authentication off on Redis, local auth off on Application Insights
+  and Log Analytics, and Azure RBAC — not access policies — on Key Vault.
+- Connection strings, account keys, access keys, and account-key SAS MUST NOT appear in
+  source, configuration, environment variables, container secrets, pipeline variables, or
+  Key Vault. A secret that does not exist cannot leak.
+- Entra ID application registrations MUST NOT hold client secrets or certificates. Where an
+  application must authenticate to Entra — including the On-Behalf-Of exchange — it MUST use
+  a federated identity credential backed by its managed identity.
+- Deployment pipelines MUST authenticate to Azure by workload identity federation. Publish
+  profiles, deployment tokens, and service principal secrets MUST NOT be used.
+- Where a signing or encryption key is genuinely required, the key material MUST stay inside
+  Key Vault and be used through the service's own sign or wrap operation. Exporting key
+  material to the application is prohibited.
+- The only credential BlinkMark may hand out is the short-lived, user-scoped, single-file
+  preview token described in Principle I — minted per request, never stored, never shared.
+- Human standing access to production data planes MUST NOT exist. Operator access is
+  just-in-time and audited.
+
+Rationale: Secret exposure is the leading cause of security incidents, and the mitigation
+is not better secret hygiene — it is having no secrets. Every control here removes a class
+of incident rather than reducing its likelihood.
+
 ## Platform and Technology Constraints
 
 BlinkMark is an Azure-native, Microsoft-tenant-internal web application. The stack
@@ -154,6 +178,10 @@ below is decided and binding. It is optimized for low steady-state cost on an
 ephemeral, internal-only workload; substitutions require an amendment, not a plan-time
 choice.
 
+- **Deployment target**: subscription `46a174f6-0602-4df8-9fb0-f8e8248bcb8f`
+  ("Commerce AI Assistant"), resource group `rg-blinkmark`, region `eastus`, Microsoft
+  corporate tenant `72f988bf-86f1-41af-91ab-2d7cd011db47`. All environments deploy into this
+  resource group and are distinguished by resource name suffix.
 - **Identity**: Microsoft Entra ID (Azure AD) is the sole identity provider, consumed
   via MSAL. No local accounts, no external federation, no premium-tier dependency.
 - **Frontend**: **React** (TypeScript, Vite) hosted on **Azure Static Web Apps
@@ -180,9 +208,14 @@ choice.
   **Microsoft Graph API** (email and Teams). Delivery MUST be queued through Azure
   Storage Queues so it is asynchronous and cannot block or fail the originating user
   action. Per-message third-party or metered email services MUST NOT be introduced.
-- **Secrets and access**: **managed identity** for all Azure-to-Azure calls; **Azure
-  Key Vault (Standard)** for the residual secrets. Connection strings and keys MUST NOT
-  be used where a managed identity is available.
+- **Secrets and access**: **managed identity** for all Azure-to-Azure calls, with local
+  authentication disabled at every resource per Principle VII. **Azure Key Vault (Standard)**
+  with Azure RBAC is used only for key material that cannot be eliminated, and such keys MUST
+  be used in place rather than exported.
+- **Network posture**: PaaS data services (Blob, Table, Queue, Cosmos, Redis, Key Vault) MUST
+  have public network access disabled and be reached over private endpoints from a
+  VNet-integrated Container Apps environment. Only the Static Web App, the API ingress, and
+  the preview ingress are internet-facing.
 - **Observability**: **Application Insights / Log Analytics** with an explicit daily
   ingestion cap configured. Telemetry MAY be sampled; audit records (Principle V) MUST
   NOT be sampled, which is why they live in Table Storage.
@@ -199,7 +232,7 @@ Tracking table naming the rejected simpler alternative.
 ## Quality Gates and Development Workflow
 
 - **Constitution Check**: Every `/speckit.plan` MUST evaluate the feature against
-  Principles I–VI before Phase 0 research and again after Phase 1 design. Violations
+  Principles I–VII before Phase 0 research and again after Phase 1 design. Violations
   are either removed or justified in Complexity Tracking.
 - **Pull requests**: Every PR MUST state which principles it touches. A PR that adds
   an endpoint MUST show its authorization check and its audit record. A PR that
@@ -208,6 +241,10 @@ Tracking table naming the rejected simpler alternative.
   merge. Failing or skipped security and retention tests MUST NOT be merged.
 - **Scanning**: Secret scanning and dependency vulnerability scanning MUST run on
   every PR. High-severity findings block merge.
+- **SFI verification**: CI MUST assert that local authentication is disabled on every
+  provisioned resource and that no connection string, account key, or client secret appears
+  in source, configuration, or pipeline definitions. A deployment that would re-enable local
+  auth MUST fail the build, not merely be flagged.
 - **Definition of done** for a user-facing feature: contract published, authorization
   enforced and tested, audit events emitted, retention behavior correct, and the UI
   path usable without documentation.
@@ -220,7 +257,7 @@ conflicts with a principle here, the principle wins.
 
 - **Amendments** MUST be proposed as a pull request that edits this file, states the
   motivation, and includes the resulting version bump and Sync Impact Report.
-  Amendments touching Principles I, II, or IV additionally require explicit sign-off
+  Amendments touching Principles I, II, IV, or VII additionally require explicit sign-off
   from the project owner.
 - **Versioning policy** follows semantic versioning:
   - **MAJOR** — a principle is removed, or redefined such that previously compliant
@@ -235,4 +272,4 @@ conflicts with a principle here, the principle wins.
   under `.github/` and in `.specify/templates/`. Those files MUST NOT contradict this
   constitution; when they drift, they are corrected, not this file.
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-26 | **Last Amended**: 2026-07-26
+**Version**: 1.2.0 | **Ratified**: 2026-07-26 | **Last Amended**: 2026-07-26
