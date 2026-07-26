@@ -105,3 +105,56 @@ Requirement count is now 69 functional requirements and 21 success criteria acro
 - Adding a real-time transport is the first material addition to the cost profile agreed for
   v1.1.0 of the constitution. The plan should size it and, if it needs a service tier beyond
   what the constitution names, record it in Complexity Tracking.
+
+### Validation iteration 4 — 2026-07-26 — post-`/speckit.clarify`, ALL ITEMS PASS
+
+Five clarification questions asked and answered; all five integrated. A `## Clarifications`
+section with a `### Session 2026-07-26` subheading now records them, one bullet per answer.
+
+| # | Question | Answer | Integrated as |
+|---|---|---|---|
+| 1 | Audit trail access | No in-product access; operators only, operational docs out of scope | FR-070; assumption stating there is no admin or compliance role |
+| 2 | File download | Owner-only, comments included | FR-071–FR-075; US3 scenarios 7–9; SC-022; download assumption |
+| 3 | Availability/durability | Best-effort, single region, no DR, loss accepted | FR-076; SC-023; durability assumption |
+| 4 | Accessibility | WCAG 2.1 Level AA | FR-077–FR-082; SC-024, SC-025; scoping assumption |
+| 5 | Human usage limits | Per-user live-file cap + upload rate limit | FR-083–FR-088; SC-026, SC-027; 2 edge cases; limits assumption |
+
+Requirement count is now 88 functional requirements and 27 success criteria across 6 stories.
+
+**Inconsistency found and repaired**: FR-041 listed "download" as an auditable action while no
+requirement granted download at all. Q2 resolved it in favour of adding the capability
+(owner-only) rather than striking the audit entry.
+
+**Cross-answer interactions worth carrying into the plan**:
+
+- Q1 (no administrator) + Q5 (quotas) forced FR-088: capacity must free itself as files expire,
+  because there is nobody to unblock a user who hits the cap.
+- Q2 (owner download) + Q3 (no backup) makes download the only way anyone preserves a review.
+  FR-075 and FR-076 exist so users understand this rather than discovering it after a loss.
+- Q4 (WCAG 2.1 AA) + US2/US6 is the largest design constraint added: FR-078 (keyboard-only
+  passage selection) and FR-082 (non-dragging region selection) mean the anchored-commenting
+  interaction model cannot be pointer-first, and FR-080 constrains how presence updates
+  announce themselves.
+- Q5 counts agent uploads against the represented user's quota (FR-087), closing delegation as
+  a route around a personal limit.
+
+**Taxonomy coverage after clarification**:
+
+| Category | Status |
+|---|---|
+| Functional scope & behavior | Clear |
+| Domain & data model | Clear |
+| Interaction & UX flow | Resolved (accessibility was Missing) |
+| Non-functional: performance, scalability | Clear |
+| Non-functional: reliability & availability | Resolved (was Missing) |
+| Non-functional: observability | Clear |
+| Non-functional: security & privacy | Clear |
+| Compliance / regulatory | Resolved (audit access was Partial) |
+| Integration & external dependencies | Resolved (download/export was Partial) |
+| Edge cases & failure handling | Resolved (rate limiting was Partial) |
+| Constraints & tradeoffs | Clear (governed by constitution v1.1.0) |
+| Terminology & consistency | Clear |
+| Completion signals | Clear |
+| Misc / placeholders | Clear — no markers remain |
+
+No Outstanding or Deferred categories. Spec is ready for `/speckit.plan`.

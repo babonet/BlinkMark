@@ -1,0 +1,451 @@
+openapi: 3.1.0
+info:
+  title: BlinkMark API
+  version: 1.0.0
+  description: >-
+    Tenant-internal API for BlinkMark. Every operation requires a Microsoft Entra ID
+    access token issued for the owning tenant. There are no anonymous operations
+    (FR-001, FR-004). Agent callers use the On-Behalf-Of flow and are indistinguishable
+    from the represented user at the authorization layer (FR-046, FR-047).
+
+servers:
+  - url: https://api.blinkmark.{tenantDomain}
+    variables:
+      tenantDomain:
+        default: example.com
+
+security:
+  - entraId: []
+
+tags:
+  - name: files
+  - name: comments
+  - name: presence
+  - name: preferences
+
+paths:
+  /api/files:
+    get:
+      tags: [files]
+      summary: List the caller's live files (FR-011)
+      responses:
+        '200':
+          description: Files owned by the caller that have not expired
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [files, quota]
+                properties:
+                  files:
+                    type: array
+                    items: { $ref: '#/components/schemas/FileSummary' }
+                  quota: { $ref: '#/components/schemas/QuotaStatus' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [files]
+      summary: Upload a file (FR-006)
+      description: >-
+        Validates declared type, extension, and size before storing (FR-007). Stores under a
+        system-generated identifier (FR-008). Sets expiry to 24 hours from upload (FR-026).
+        Counts against the caller's quota and rate limit, including when an agent uploads on
+        the caller's behalf (FR-087).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileDetail' }
+        '400':
+          description: Failed validation — unsupported type, extension/content mismatch, or too large (FR-007)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409':
+          description: Live-file quota exceeded. Body states current usage and how capacity is restored (FR-084, SC-027).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/files/{fileId}:
+    parameters:
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [files]
+      summary: Get file metadata
+      description: Any authenticated tenant member holding the identifier may read it (FR-056).
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileDetail' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFoundOrExpired' }
+    delete:
+      tags: [files]
+      summary: Delete own file before expiry (FR-033)
+      description: Owner only (FR-058). Removes content, metadata, and all comments (FR-031).
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFoundOrExpired' }
+
+  /api/files/{fileId}/retention:
+    parameters:
+      - $ref: '#/components/parameters/FileId'
+    patch:
+      tags: [files]
+      summary: Extend retention (FR-027)
+      description: >-
+        Owner only (FR-029). Refused beyond 30 days from original upload through every
+        interface (FR-028). Audited with previous and new expiry (US3 scenario 5).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expiresAt]
+              properties:
+                expiresAt: { type: string, format: date-time }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileDetail' }
+        '403':
+          description: Caller is not the owner (FR-029)
+        '422':
+          description: Requested expiry exceeds maxExpiresAt; existing expiry unchanged (FR-028)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/files/{fileId}/download:
+    parameters:
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [files]
+      summary: Download file with its comments (FR-071, FR-073)
+      description: >-
+        Owner only; refused for viewers and for agents acting for a non-owner (FR-072).
+        The bundle includes every comment, orphaned ones included, with author, time, thread
+        structure, and anchored passage (FR-073, FR-074, SC-022). Audited (FR-041).
+      responses:
+        '200':
+          description: Bundle containing content and comments
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        '403':
+          description: Caller is not the owner (FR-072)
+        '404': { $ref: '#/components/responses/NotFoundOrExpired' }
+
+  /api/files/{fileId}/content:
+    parameters:
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [files]
+      summary: Structured machine-readable content (FR-051)
+      description: >-
+        Returns the normalized text projection and anchor descriptors rather than a rendered
+        page. This is the representation agents read, and the same projection anchors resolve
+        against, so an agent can never comment on text no human could see.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StructuredContent' }
+        '404': { $ref: '#/components/responses/NotFoundOrExpired' }
+
+  /api/files/{fileId}/comments:
+    parameters:
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [comments]
+      summary: List comments for a file (FR-020)
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Comment' }
+        '404': { $ref: '#/components/responses/NotFoundOrExpired' }
+    post:
+      tags: [comments]
+      summary: Create a comment or reply (FR-017, FR-018, FR-021)
+      description: >-
+        Author identity is taken from the token; any client-supplied author is ignored
+        (FR-005, FR-023). Enqueues notification delivery asynchronously so delivery problems
+        cannot fail this call (FR-037).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body, anchor]
+              properties:
+                body: { type: string, maxLength: 10000 }
+                anchor: { $ref: '#/components/schemas/Anchor' }
+                parentId: { type: string, nullable: true }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+        '404': { $ref: '#/components/responses/NotFoundOrExpired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/files/{fileId}/comments/{commentId}:
+    parameters:
+      - $ref: '#/components/parameters/FileId'
+      - name: commentId
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [comments]
+      summary: Edit own comment (FR-025)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, maxLength: 10000 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+        '403': { description: Not the comment author }
+    delete:
+      tags: [comments]
+      summary: Delete own comment (FR-025)
+      responses:
+        '204': { description: Deleted }
+        '403': { description: Not the comment author }
+
+  /api/files/{fileId}/presence:
+    parameters:
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [presence]
+      summary: Presence event stream (FR-059, FR-061)
+      description: >-
+        Server-Sent Events. Disclosed only to users authorized to view the file (FR-064).
+        If this endpoint is unavailable the client MUST continue to preview and comment
+        normally (FR-069).
+      responses:
+        '200':
+          description: text/event-stream of presence snapshots
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '403':
+          description: Not authorized to view this file — nothing about viewers is disclosed (FR-064, SC-020)
+    post:
+      tags: [presence]
+      summary: Heartbeat
+      description: >-
+        Refreshes the caller's presence for this file. Ceasing to heartbeat is how departure
+        is detected, including for connections that drop without notice (FR-062, SC-018).
+      responses:
+        '204': { description: Recorded }
+
+  /api/me/preferences:
+    get:
+      tags: [preferences]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPreferences' }
+    patch:
+      tags: [preferences]
+      summary: Update preferences, including turning notifications off (FR-040)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserPreferences' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPreferences' }
+
+components:
+  securitySchemes:
+    entraId:
+      type: oauth2
+      description: >-
+        Microsoft Entra ID. Interactive users use authorization code with PKCE. Agents use
+        On-Behalf-Of, which requires an inbound user assertion — there is no app-only
+        credential, so an agent cannot act for a signed-out user (FR-055).
+      flows:
+        authorizationCode:
+          authorizationUrl: https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/authorize
+          tokenUrl: https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token
+          scopes:
+            Files.ReadWrite: Upload, read, and manage own files
+            Comments.ReadWrite: Read and write comments
+
+  parameters:
+    FileId:
+      name: fileId
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    Unauthenticated:
+      description: No valid tenant token. No content, metadata, or filename is disclosed (FR-001).
+    Forbidden:
+      description: Authenticated but not permitted. Identical for agents and users (FR-047).
+    NotFoundOrExpired:
+      description: >-
+        Not found, or expired. Expired content reads as absent even before physical
+        deletion (FR-032). Deliberately indistinguishable from not-found.
+    RateLimited:
+      description: Rate limit exceeded (FR-054, FR-085). States which limit and how capacity returns (SC-027).
+      headers:
+        Retry-After:
+          schema: { type: integer }
+
+  schemas:
+    FileSummary:
+      type: object
+      required: [id, displayName, contentType, uploadedAt, expiresAt, maxExpiresAt, isOwner]
+      properties:
+        id: { type: string }
+        displayName: { type: string }
+        contentType: { type: string, enum: [html, markdown] }
+        sizeBytes: { type: integer }
+        uploadedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        maxExpiresAt:
+          type: string
+          format: date-time
+          description: uploadedAt + 30 days. The ceiling is data, not validation logic (FR-028).
+        isOwner: { type: boolean }
+
+    FileDetail:
+      allOf:
+        - $ref: '#/components/schemas/FileSummary'
+        - type: object
+          properties:
+            ownerDisplayName: { type: string }
+            previewUrl:
+              type: string
+              description: Absolute URL on the isolated preview origin, never the API origin (FR-014).
+            accessScopeNotice:
+              type: string
+              description: >-
+                Statement shown to the uploader that anyone in the organization holding the
+                link can open and comment (FR-057, SC-016).
+            retentionNotice:
+              type: string
+              description: Statement that content is not backed up or recoverable (FR-076).
+
+    QuotaStatus:
+      type: object
+      required: [liveFiles, liveFileLimit]
+      properties:
+        liveFiles: { type: integer }
+        liveFileLimit: { type: integer }
+        note:
+          type: string
+          description: How capacity is restored — delete a file or let one expire (FR-086, FR-088).
+
+    Anchor:
+      type: object
+      required: [kind, exact, renderVersion]
+      properties:
+        kind: { type: string, enum: [text, region] }
+        exact: { type: string, description: Quoted passage; displayed when orphaned (FR-022) }
+        prefix: { type: string }
+        suffix: { type: string }
+        start: { type: integer }
+        end: { type: integer }
+        containerPath: { type: string, nullable: true }
+        fractionalRect:
+          type: object
+          nullable: true
+          description: Normalized offsets within the container. Never pixel coordinates.
+          properties:
+            x: { type: number }
+            y: { type: number }
+            w: { type: number }
+            h: { type: number }
+        renderVersion: { type: string }
+
+    Comment:
+      type: object
+      required: [id, fileId, threadId, body, authorId, authorDisplayName, createdAt, anchor, anchorState]
+      properties:
+        id: { type: string }
+        fileId: { type: string }
+        threadId: { type: string }
+        parentId: { type: string, nullable: true }
+        body: { type: string, description: Literal text. Never rendered as markup (FR-024). }
+        authorId: { type: string }
+        authorDisplayName: { type: string }
+        actingAgentId:
+          type: string
+          nullable: true
+          description: Set when an agent acted. Drives human-visible attribution (FR-048).
+        createdAt: { type: string, format: date-time }
+        editedAt: { type: string, format: date-time, nullable: true }
+        anchor: { $ref: '#/components/schemas/Anchor' }
+        anchorState:
+          type: string
+          enum: [anchored, orphaned]
+          description: An unresolvable anchor is surfaced, never hidden or moved (FR-022).
+
+    StructuredContent:
+      type: object
+      required: [fileId, renderVersion, blocks]
+      properties:
+        fileId: { type: string }
+        renderVersion: { type: string }
+        blocks:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              text: { type: string }
+              start: { type: integer }
+              end: { type: integer }
+
+    UserPreferences:
+      type: object
+      properties:
+        notificationsEnabled: { type: boolean, description: FR-040 }
+
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        correlationId: { type: string, description: Propagated end to end (Principle V) }

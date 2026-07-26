@@ -1,0 +1,221 @@
+{
+  "$comment": "MCP tool manifest for BlinkMark. Satisfies FR-052: a machine-readable description of the operations available to agents, their inputs, outputs, and required permissions, discoverable without human documentation. Served over Streamable HTTP from the API container and returned by tools/list.",
+  "protocolVersion": "2025-06-18",
+  "serverInfo": {
+    "name": "blinkmark",
+    "version": "1.0.0",
+    "description": "Read and comment on short-lived HTML and Markdown drafts on behalf of a signed-in user."
+  },
+  "authorization": {
+    "scheme": "oauth2",
+    "issuer": "https://login.microsoftonline.com/{tenantId}/v2.0",
+    "flow": "on-behalf-of",
+    "notes": [
+      "The agent's permissions are exactly the represented user's, never broader (FR-046).",
+      "On-Behalf-Of requires an inbound user assertion, so no app-only credential exists and an agent cannot act for a signed-out user (FR-055).",
+      "Withdrawing user access or consent revokes the agent immediately, because authority lives in the token and nothing is stored (FR-050).",
+      "Denials are identical to denials for the user acting directly (FR-047)."
+    ]
+  },
+  "tools": [
+    {
+      "name": "list_my_files",
+      "description": "List the represented user's live, unexpired files. Returns exactly what that user would see in the interface.",
+      "requiredScopes": ["Files.ReadWrite"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "displayName": { "type": "string" },
+                "contentType": { "type": "string", "enum": ["html", "markdown"] },
+                "uploadedAt": { "type": "string", "format": "date-time" },
+                "expiresAt": { "type": "string", "format": "date-time" },
+                "maxExpiresAt": { "type": "string", "format": "date-time" }
+              }
+            }
+          },
+          "quota": {
+            "type": "object",
+            "properties": {
+              "liveFiles": { "type": "integer" },
+              "liveFileLimit": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "read_file_content",
+      "description": "Retrieve a file's content as structured, machine-readable text blocks with anchor offsets. Returns the same normalized projection that comment anchors resolve against, not a rendered visual page (FR-051).",
+      "requiredScopes": ["Files.ReadWrite"],
+      "inputSchema": {
+        "type": "object",
+        "required": ["fileId"],
+        "properties": {
+          "fileId": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "fileId": { "type": "string" },
+          "renderVersion": { "type": "string" },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string" },
+                "text": { "type": "string" },
+                "start": { "type": "integer" },
+                "end": { "type": "integer" }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        { "code": "not_found_or_expired", "description": "Unknown file, or its expiry has passed. Expired content reads as absent (FR-032)." },
+        { "code": "forbidden", "description": "The represented user may not access this file (FR-047)." }
+      ]
+    },
+    {
+      "name": "list_comments",
+      "description": "List all comments on a file, including orphaned ones with their original quoted context.",
+      "requiredScopes": ["Comments.ReadWrite"],
+      "inputSchema": {
+        "type": "object",
+        "required": ["fileId"],
+        "properties": {
+          "fileId": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "comments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "threadId": { "type": "string" },
+                "parentId": { "type": ["string", "null"] },
+                "body": { "type": "string" },
+                "authorDisplayName": { "type": "string" },
+                "actingAgentId": { "type": ["string", "null"] },
+                "createdAt": { "type": "string", "format": "date-time" },
+                "anchorState": { "type": "string", "enum": ["anchored", "orphaned"] },
+                "anchor": {
+                  "type": "object",
+                  "properties": {
+                    "kind": { "type": "string", "enum": ["text", "region"] },
+                    "exact": { "type": "string" },
+                    "prefix": { "type": "string" },
+                    "suffix": { "type": "string" },
+                    "start": { "type": "integer" },
+                    "end": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "create_comment",
+      "description": "Attach a comment to a passage of a file, or reply to an existing comment. The comment is authored by the represented user with this agent recorded as the acting client, and that attribution is visible to human readers (FR-048).",
+      "requiredScopes": ["Comments.ReadWrite"],
+      "inputSchema": {
+        "type": "object",
+        "required": ["fileId", "body", "anchor"],
+        "properties": {
+          "fileId": { "type": "string" },
+          "body": { "type": "string", "maxLength": 10000 },
+          "parentId": { "type": ["string", "null"] },
+          "anchor": {
+            "type": "object",
+            "required": ["kind", "exact", "renderVersion"],
+            "properties": {
+              "kind": { "type": "string", "enum": ["text", "region"] },
+              "exact": { "type": "string", "description": "The passage being commented on. Must come from read_file_content output." },
+              "prefix": { "type": "string" },
+              "suffix": { "type": "string" },
+              "start": { "type": "integer" },
+              "end": { "type": "integer" },
+              "renderVersion": { "type": "string" }
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "anchorState": { "type": "string", "enum": ["anchored", "orphaned"] }
+        }
+      },
+      "errors": [
+        { "code": "rate_limited", "description": "Agent request rate exceeded so interactive users are not degraded (FR-054)." }
+      ],
+      "$comment": "The author field is deliberately absent from the input schema. Author identity comes from the token; a supplied value would be ignored (FR-005, FR-023)."
+    },
+    {
+      "name": "extend_retention",
+      "description": "Extend a file's expiry. Permitted only when the represented user owns the file, and never beyond 30 days from original upload.",
+      "requiredScopes": ["Files.ReadWrite"],
+      "inputSchema": {
+        "type": "object",
+        "required": ["fileId", "expiresAt"],
+        "properties": {
+          "fileId": { "type": "string" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "maxExpiresAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "errors": [
+        { "code": "forbidden", "description": "The represented user does not own this file (FR-029)." },
+        { "code": "ceiling_exceeded", "description": "Requested expiry is beyond 30 days from upload; existing expiry unchanged (FR-028)." }
+      ]
+    }
+  ],
+  "notProvided": [
+    {
+      "capability": "upload_file",
+      "reason": "Deliberately omitted in this phase. Upload is a human act of sharing; agent-side upload adds quota and content-provenance questions with no requirement behind it. If added, FR-087 requires it to count against the represented user's quota and rate limit."
+    },
+    {
+      "capability": "download_file",
+      "reason": "Download is owner-only (FR-071) and an agent acting for a non-owner must be refused (FR-072). Exposing it as a tool invites agents to attempt it routinely and be denied."
+    },
+    {
+      "capability": "read_audit_trail",
+      "reason": "No product interface exposes audit entries in this phase, and no role grants access (FR-070, clarification Q1)."
+    },
+    {
+      "capability": "read_presence",
+      "reason": "Presence is transient and never the record of access (FR-067, FR-068). An agent reading it would encourage exactly the misuse FR-068 forbids."
+    }
+  ]
+}

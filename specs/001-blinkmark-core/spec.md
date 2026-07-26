@@ -5,6 +5,16 @@
 **Status**: Draft  
 **Input**: User description: "BlinkMark — file upload (HTML/Markdown), anchored commenting, 24-hour default retention extendable to 30 days, email/Teams notifications, tenant-only secure access, integrated live preview. Non-functional: encrypted storage, strict Azure AD authorization, fast upload/retrieval and low-latency commenting, hundreds of concurrent users, enforced retention with audit logs, intuitive UI. Additionally: the app must be AI-ready so an AI agent can access it on behalf of the user; and the app must show who and how many users are currently online on a document."
 
+## Clarifications
+
+### Session 2026-07-26
+
+- Q: Who can read the audit trail, and how? → A: No in-product access — audit entries are retained and retrievable only by operators through platform tooling; operational documentation and runbooks are out of scope for this phase.
+- Q: Can users download a file, given FR-041 audits "download" but nothing grants it? → A: Yes, but the file's owner only. A download includes the file's comments alongside the content.
+- Q: What availability and durability posture should the service hold? → A: Best-effort — single region, locally redundant, no disaster recovery. Loss of files and comments in an infrastructure failure is an accepted outcome.
+- Q: What accessibility standard applies? → A: WCAG 2.1 Level AA across all user-facing flows, including keyboard-only commenting and screen-reader announcement of presence changes.
+- Q: What limits constrain human users, given only agents are rate-limited? → A: A per-user cap on simultaneously live files, plus a per-user upload rate limit.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Share a draft and preview it safely (Priority: P1) 🎯 MVP
@@ -64,6 +74,9 @@ A review is taking longer than a day. The person who uploaded the file sees how 
 4. **Given** a file owned by someone else, **When** a different user attempts to extend it, **Then** the request is refused.
 5. **Given** any successful retention extension, **When** it completes, **Then** an audit record captures who extended it, the file, the previous expiry, and the new expiry.
 6. **Given** a file that reaches its expiry, **When** the expiry passes, **Then** the file content, its metadata, and its comments are removed without any user action.
+7. **Given** a file owned by the current user, **When** they download it, **Then** they receive the content together with all of its comments — including orphaned ones — each showing its author, time, and the passage it was anchored to.
+8. **Given** a file owned by someone else, **When** a user who is only a viewer attempts to download it, **Then** the request is refused.
+9. **Given** an owner downloading their file, **When** the download is offered, **Then** they are told the downloaded copy will outlive the file's expiry.
 
 ---
 
@@ -143,6 +156,8 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 - A file is opened by far more simultaneous viewers than the presence display was designed to show.
 - A user is actively present on a file at the exact moment it expires.
 - A file expires while a reviewer has it open in the preview.
+- A user reaches their live-file cap and needs capacity immediately, with no administrator available to raise it.
+- An agent uploads on a user's behalf while that user is already at their cap.
 - A very large file, or one with tens of thousands of comments, is opened.
 - An AI agent issues a rapid burst of requests, or requests a file that expired between its listing call and its read call.
 - An uploaded file's extension does not match its actual content.
@@ -176,6 +191,33 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 - **FR-014**: System MUST render preview content in an isolated context that cannot read the viewer's session, credentials, or the surrounding application.
 - **FR-015**: System MUST render Markdown to formatted output including headings, lists, tables, code blocks, and links.
 - **FR-016**: System MUST neutralize references from uploaded content to external network resources, or render them without granting the content access to the viewer's identity.
+
+#### Download
+
+- **FR-071**: System MUST allow a file's owner to download that file.
+- **FR-072**: System MUST refuse download to anyone who is not the file's owner, including an agent acting for a non-owner. Viewers and commenters have preview access only.
+- **FR-073**: A download MUST include the file's comments together with its content, readable outside the product, with each comment's author, time, thread structure, and the passage it was anchored to.
+- **FR-074**: A download MUST include orphaned comments with their original quoted context, so that no comment is lost from the downloaded record.
+- **FR-075**: System MUST make clear to the owner at download time that the downloaded copy is no longer governed by the file's expiry.
+- **FR-076**: System MUST set the expectation in the interface that BlinkMark is temporary working space rather than a system of record, and that content is not backed up or recoverable once lost, deleted, or expired.
+
+#### Accessibility
+
+- **FR-077**: All user-facing flows MUST conform to WCAG 2.1 Level AA.
+- **FR-078**: Users MUST be able to select a passage and attach a comment to it using the keyboard alone, without a pointing device.
+- **FR-079**: System MUST convey a comment's presence, its anchored passage, and its orphaned state to assistive technology, not by visual highlight alone.
+- **FR-080**: System MUST announce presence changes to assistive technology non-disruptively, without moving focus or interrupting the user's current task.
+- **FR-081**: System MUST keep the preview navigable by keyboard, including a reliable way to move focus into and back out of the previewed content.
+- **FR-082**: System MUST provide a non-dragging alternative for any region selection, so that attaching a comment never requires a drag gesture.
+
+#### Usage limits
+
+- **FR-083**: System MUST cap the number of simultaneously live, unexpired files a single user may own.
+- **FR-084**: System MUST refuse an upload that would exceed that cap, and MUST tell the user their current usage and that capacity is restored by deleting a file or letting one expire.
+- **FR-085**: System MUST limit the rate at which a single user may upload files.
+- **FR-086**: System MUST show users their current live-file usage against the cap before they reach it.
+- **FR-087**: System MUST count an upload performed by an agent on a user's behalf against that user's cap and rate limit, so delegation cannot be used to exceed a personal limit.
+- **FR-088**: System MUST restore capacity automatically as files expire, with no administrative intervention required to unblock a user.
 
 #### Commenting
 
@@ -217,6 +259,7 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 - **FR-043**: System MUST retain audit entries independently of the file they describe, so that deleting or expiring a file does not remove its history.
 - **FR-044**: System MUST make audit entries append-only, with no interface that permits application-level modification or deletion.
 - **FR-045**: System MUST exclude file content, comment text, and credentials from operational logs and telemetry.
+- **FR-070**: System MUST keep audit entries retrievable by operators through platform tooling, independently of the product interface. The product MUST NOT expose any interface for reading, querying, or exporting audit entries in this phase, and no user role grants such access.
 
 #### AI agent access
 
@@ -288,6 +331,12 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 - **SC-019**: Enabling presence causes no measurable regression against SC-002 and SC-003 at the SC-005 concurrency level.
 - **SC-020**: Zero cases of presence information revealing a viewer's identity or the viewer count to anyone not authorized to view that file.
 - **SC-021**: Presence remains accurate to within one viewer for files with up to 50 simultaneous viewers.
+- **SC-022**: Every owner download reproduces 100% of that file's comments, anchored and orphaned alike, with author, time, and anchored passage intact.
+- **SC-023**: Service availability is 99.5% or better measured monthly, on a best-effort basis with no formal service guarantee and no stated recovery objective.
+- **SC-024**: BlinkMark's own interface passes a WCAG 2.1 Level AA audit with zero Level A or Level AA violations across every user story flow.
+- **SC-025**: A person using only a keyboard and a screen reader can complete upload, preview, and anchored commenting end to end, without sighted assistance and without a pointing device.
+- **SC-026**: Zero cases of a single user holding more live files than the configured cap, through any interface including agent-initiated uploads.
+- **SC-027**: 100% of uploads refused for quota or rate reasons tell the user which limit was hit and how capacity is restored.
 
 ## Assumptions
 
@@ -298,6 +347,11 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 - A single file per upload; multi-file bundles, archives, and HTML with local asset dependencies are out of scope for this feature.
 - Files are immutable once uploaded. Producing a corrected draft means uploading a new file; re-anchoring comments across versions is out of scope, and orphan handling covers the case where content is re-uploaded under an existing file.
 - Notification delivery uses the organization's existing email and collaboration platform, so no separate messaging subscription or per-message cost is introduced, and no separate recipient address book is maintained.
+- Audit entries are written for compliance but are not readable through the product in this phase. There is no administrator or compliance role, no audit browsing or export interface, and no operational runbook describing retrieval — operational documentation is out of scope for this phase. The audit trail's job here is to exist, be complete, and be tamper-resistant.
+- Download is deliberately owner-only. A downloaded copy leaves the retention perimeter permanently, so restricting it to the one person who already had the content limits fan-out without making the retention promise meaningless. The file format of the downloaded content-plus-comments bundle is an implementation decision for the plan, not a product promise.
+- The service runs best-effort from a single region with local redundancy. There is no disaster recovery, no cross-region failover, no backup, and no restore capability. An infrastructure failure may permanently lose files and their comments; owners hold the original content and re-upload, and lost review commentary is an accepted cost of keeping the service cheap. This trade-off is a deliberate consequence of content being short-lived by design.
+- WCAG 2.1 AA conformance covers BlinkMark's own interface — upload, file list, preview chrome, commenting, presence, retention controls. The accessibility of the *uploaded content itself* is the uploader's responsibility and outside BlinkMark's control; the product must not degrade it, but cannot be held to a conformance level for arbitrary third-party HTML it renders.
+- Default usage limits are 50 simultaneously live files per user and 20 uploads per hour per user. These are configurable operational values, not product promises. There is no override or exemption mechanism and no administrator to grant one — consistent with there being no administrative role in this phase — so limits must be set high enough that ordinary use never encounters them.
 - Retention is measured from original upload time, not from the most recent extension, so extensions cannot be chained to exceed the ceiling.
 - Audit entries are retained for at least one year — well beyond the 30-day file ceiling — to serve compliance review after content is gone.
 - Delegated agent permission is obtained through the organization's standard consent process; BlinkMark does not define its own consent mechanism.
