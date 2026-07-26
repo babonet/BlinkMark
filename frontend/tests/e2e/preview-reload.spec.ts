@@ -53,8 +53,8 @@ test.describe('Preview token renewal', () => {
 
     await firstFile.click();
 
-    // The rendered preview lives behind the view switch; Text is what a reader lands on.
-    await page.getByRole('button', { name: /^Rendered/ }).click();
+    // The rendered preview is behind a disclosure; the document itself is what a reader lands on.
+    await page.getByRole('group', { name: /see exactly how this file renders/i }).click();
 
     // The reader sees content, and never an authentication failure.
     await expect(page.getByRole('group', { name: /preview of/i })).toBeVisible();

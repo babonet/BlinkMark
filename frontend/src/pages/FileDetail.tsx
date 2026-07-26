@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMsal } from '@azure/msal-react';
-import { ApiError, apiClient, type Anchor, type Comment, type FileDetail } from '../services/apiClient';
+import {
+  ApiError,
+  apiClient,
+  type Anchor,
+  type Comment,
+  type DocumentBlock,
+  type FileDetail,
+} from '../services/apiClient';
 import { PreviewFrame } from '../components/preview/PreviewFrame';
 import { PassageSelector } from '../components/comments/PassageSelector';
 import { CommentSidebar } from '../components/comments/CommentSidebar';
@@ -26,13 +33,14 @@ export function FileDetailPage() {
 
   const [file, setFile] = useState<FileDetail | null>(null);
   const [projection, setProjection] = useState<string>('');
+  const [blocks, setBlocks] = useState<DocumentBlock[]>([]);
   const [renderVersion, setRenderVersion] = useState<string>('');
   const [comments, setComments] = useState<Comment[]>([]);
   const [pendingAnchor, setPendingAnchor] = useState<Anchor | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  /** Which representation of the document is on screen. Text is the one you can work in. */
-  const [view, setView] = useState<'text' | 'rendered'>('text');
+  /** The exact rendering is opt-in; it costs a preview token and a cross-origin frame to show. */
+  const [showRendering, setShowRendering] = useState(false);
 
   /** Owner-only: hide the owner controls to see what a reviewer sees. */
   const [asReviewer, setAsReviewer] = useState(false);
@@ -55,6 +63,7 @@ export function FileDetailPage() {
 
       setFile(detail);
       setProjection(content.text);
+      setBlocks(content.blocks);
       setRenderVersion(content.renderVersion);
       setComments(existing);
     } catch (loadError) {
@@ -147,55 +156,44 @@ export function FileDetailPage() {
       <div className="file-layout">
         <div className="file-main">
           {/*
-            The text comes first, and the rendered preview is something you switch to.
-            That ordering is the opposite of the obvious one, and it is deliberate: the preview
-            is a cross-origin sandboxed iframe, so nothing in it can be selected or commented on.
-            Leading with it puts the one surface you cannot work in at the top of the page and
-            hides the one you can (research.md R2).
-          */}
-          <div className="view-switch" role="group" aria-label="How to view this document">
-            <button
-              type="button"
-              className={view === 'text' ? 'view-switch__option is-selected' : 'view-switch__option'}
-              aria-pressed={view === 'text'}
-              onClick={() => setView('text')}
-            >
-              Text
-              <span className="view-switch__hint">select passages and comment</span>
-            </button>
-            <button
-              type="button"
-              className={view === 'rendered' ? 'view-switch__option is-selected' : 'view-switch__option'}
-              aria-pressed={view === 'rendered'}
-              onClick={() => setView('rendered')}
-            >
-              Rendered
-              <span className="view-switch__hint">check formatting, read-only</span>
-            </button>
-          </div>
+            One document, not two views of it. An earlier version put a "Text" tab beside the
+            rendered preview, which exposed an implementation detail — the normalized text
+            projection — as though it were a feature. A reviewer wants to read the document and
+            comment on it; that is now the only thing on offer, and it renders with its headings,
+            lists and quotations intact.
 
-          {view === 'text' ? (
-            <PassageSelector
-              projection={projection}
-              renderVersion={renderVersion}
-              onSelect={setPendingAnchor}
-              highlights={highlights}
-            />
-          ) : (
-            <>
-              <p className="view-note">
-                This is how the document renders. It is isolated in a sandbox so that nothing in it can reach
-                your session, which also means you cannot select text here — switch back to{' '}
-                <strong>Text</strong> to comment.
-              </p>
+            The rendered preview is still available below for the one job it is uniquely good at:
+            showing exactly how the file renders. It cannot be commented on, because it is a
+            sandboxed cross-origin frame whose DOM this application deliberately cannot reach.
+          */}
+          <PassageSelector
+            title={file.displayName}
+            projection={projection}
+            blocks={blocks}
+            renderVersion={renderVersion}
+            onSelect={setPendingAnchor}
+            highlights={highlights}
+          />
+
+          <details
+            className="exact-rendering"
+            open={showRendering}
+            onToggle={(event) => setShowRendering(event.currentTarget.open)}
+          >
+            <summary>See exactly how this file renders</summary>
+            <p className="view-note">
+              Isolated in a sandbox so that nothing in it can reach your session, which also means text here
+              cannot be selected. Comment on the document above.
+            </p>
+            {showRendering && (
               <PreviewFrame
                 fileId={file.id}
                 displayName={file.displayName}
                 previewUrl={file.previewUrl}
                 onPreviewUrlChanged={(previewUrl) => setFile({ ...file, previewUrl })}
               />
-            </>
-          )}
+            )}
+          </details>
         </div>
 
         <div id="comments" tabIndex={-1}>

@@ -29,7 +29,7 @@ test.describe('Keyboard-only commenting', () => {
     test.skip((await firstFile.count()) === 0, 'No file available to comment on.');
     await firstFile.click();
 
-    await expect(page.getByRole('heading', { name: /document text/i })).toBeVisible();
+    await expect(page.locator('.passage').first()).toBeVisible();
   });
 
   test('has no automatically detectable accessibility violations', async ({ page }) => {

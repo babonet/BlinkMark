@@ -89,15 +89,16 @@ test.describe('Preview region', () => {
 
     await firstFile.click();
 
-    // The rendered preview is not the default view. Text is, because the preview is a sandboxed
-    // cross-origin frame and nothing in it can be selected or commented on.
-    await page.getByRole('button', { name: /^Rendered/ }).click();
+    // The rendered preview is behind a disclosure, not shown by default. It is a sandboxed
+    // cross-origin frame that cannot be selected or commented on, so leading with it would put
+    // the one unusable surface first.
+    await page.getByRole('group', { name: /see exactly how this file renders/i }).click();
 
     const region = page.getByRole('group', { name: /preview of/i });
     await expect(region).toBeVisible();
   });
 
-  test('the text view is what a reader lands on', async ({ page }) => {
+  test('the document itself is what a reader lands on', async ({ page }) => {
     const firstFile = page
       .getByRole('link')
       .filter({ hasText: /\.(md|html)$/ })
@@ -106,10 +107,9 @@ test.describe('Preview region', () => {
 
     await firstFile.click();
 
-    // The regression this guards against is leading with the one surface a reviewer cannot work
-    // in, which is what the layout did originally.
-    await expect(page.getByRole('button', { name: /^Text/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('heading', { name: /document text/i })).toBeVisible();
+    // The regression this guards against is showing the reader an implementation artifact — the
+    // flat text projection — or the one surface they cannot work in.
+    await expect(page.locator('.passage').first()).toBeVisible();
     await expect(page.getByRole('group', { name: /preview of/i })).toHaveCount(0);
   });
 
@@ -121,7 +121,7 @@ test.describe('Preview region', () => {
     test.skip((await firstFile.count()) === 0, 'No file available.');
 
     await firstFile.click();
-    await page.getByRole('button', { name: /^Rendered/ }).click();
+    await page.getByRole('group', { name: /see exactly how this file renders/i }).click();
 
     // FR-081. An iframe sits in the tab order, so there has to be a way past it.
     await expect(page.getByRole('link', { name: /skip preview and go to comments/i })).toBeAttached();

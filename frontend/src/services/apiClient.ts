@@ -48,12 +48,33 @@ export interface FileDetail extends FileSummary {
  * unreachable by design, so selection and anchoring happen against this instead — the same
  * artifact the server resolves against and agents read (research.md R2).
  */
+export type DocumentBlockType = 'paragraph' | 'heading' | 'listItem' | 'quote' | 'code' | 'tableCell';
+
+/**
+ * One block of a document.
+ *
+ * Data, not markup. The server sends a type from this closed set plus text; the client decides
+ * what element that becomes. That is what lets a reviewer read a properly formatted document
+ * without any uploaded HTML reaching the application origin (Principle IV).
+ */
+export interface DocumentBlock {
+  type: DocumentBlockType;
+  /** Heading level 1-6, or zero. */
+  level: number;
+  ordered: boolean;
+  text: string;
+  /** Offsets into the flat text projection, which is what anchors resolve against. */
+  start: number;
+  end: number;
+}
+
 export interface FileContent {
   fileId: string;
   displayName: string;
   contentType: FileContentType;
   renderVersion: string;
   text: string;
+  blocks: DocumentBlock[];
   expiresAt: string;
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Anchor, Comment } from '../../services/apiClient';
+import { DeleteIcon, EditIcon, ReplyIcon } from '../icons/Icons';
 import { CommentBody } from './CommentBody';
 
 interface CommentSidebarProps {
@@ -72,6 +73,7 @@ export function CommentSidebar({
   const [replyDraft, setReplyDraft] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -190,19 +192,56 @@ export function CommentSidebar({
 
         {mine && !comment.deletedAt && editing !== comment.id && (
           <div className="comment-actions">
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
-                setEditing(comment.id);
-                setEditDraft(comment.body);
-              }}
-            >
-              Edit<span className="visually-hidden"> your comment</span>
-            </button>
-            <button type="button" className="secondary" onClick={() => void onDelete(comment.id)}>
-              Delete<span className="visually-hidden"> your comment</span>
-            </button>
+            {confirmingDelete === comment.id ? (
+              /*
+                A two-step delete, and only for the icon.
+                
+                An icon-only destructive control is precisely where a mis-click happens: there is
+                no word to read before the pointer lands. The confirmation is worded rather than
+                iconic for the same reason — the moment something is about to be destroyed is the
+                wrong moment to make somebody interpret a picture.
+              */
+              <>
+                <span className="comment-actions__prompt">Delete this comment?</span>
+                <button
+                  type="button"
+                  className="danger compact"
+                  onClick={() => {
+                    setConfirmingDelete(null);
+                    void onDelete(comment.id);
+                  }}
+                >
+                  Delete
+                </button>
+                <button type="button" className="secondary compact" onClick={() => setConfirmingDelete(null)}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="icon-button"
+                  title="Edit your comment"
+                  onClick={() => {
+                    setEditing(comment.id);
+                    setEditDraft(comment.body);
+                  }}
+                >
+                  <EditIcon />
+                  <span className="visually-hidden">Edit your comment</span>
+                </button>
+                <button
+                  type="button"
+                  className="icon-button icon-button--danger"
+                  title="Delete your comment"
+                  onClick={() => setConfirmingDelete(comment.id)}
+                >
+                  <DeleteIcon />
+                  <span className="visually-hidden">Delete your comment</span>
+                </button>
+              </>
+            )}
           </div>
         )}
       </article>
@@ -260,7 +299,17 @@ export function CommentSidebar({
             </button>
           </form>
         ) : (
-          <button type="button" className="secondary" onClick={() => setReplyTo(thread.threadId)}>
+          /*
+            Reply keeps its word alongside the icon. It is the action a reviewer is most likely to
+            want and least likely to look for, and an unlabelled arrow beneath a comment reads as
+            ambiguous in a way that a pencil beside your own words does not.
+          */
+          <button
+            type="button"
+            className="secondary compact reply-button"
+            onClick={() => setReplyTo(thread.threadId)}
+          >
+            <ReplyIcon />
             Reply
             <span className="visually-hidden">
               {' '}

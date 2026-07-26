@@ -276,14 +276,9 @@ td {
 .share-bar {
   border: 1px solid var(--colour-border);
   border-radius: var(--radius);
-  padding: 0.75rem 1rem;
-  margin-bottom: 1.5rem;
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 1.25rem;
   background: #f7f9fb;
-}
-
-.share-bar h2 {
-  font-size: 1rem;
-  margin: 0 0 0.5rem;
 }
 
 .share-row {
@@ -294,63 +289,170 @@ td {
 }
 
 .share-row input {
-  flex: 1 1 22rem;
+  flex: 0 1 20rem;
   min-width: 0;
   font: inherit;
-  font-size: 0.9rem;
-  padding: 0.4rem 0.6rem;
+  font-size: 0.82rem;
+  padding: 0.25rem 0.5rem;
   border: 1px solid var(--colour-border);
   border-radius: var(--radius);
   background: #ffffff;
-}
-
-.share-bar .scope-notice {
-  margin: 0.6rem 0 0;
-  font-size: 0.9rem;
-}
-
-/* --- Text / rendered switch -------------------------------------------- */
-
-.view-switch {
-  display: flex;
-  gap: 0.25rem;
-  margin-bottom: 0.75rem;
-  border-bottom: 2px solid var(--colour-border);
-}
-
-.view-switch__option {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.1rem;
-  background: none;
-  border: none;
-  border-bottom: 3px solid transparent;
-  border-radius: 0;
-  color: var(--colour-text);
-  padding: 0.5rem 0.9rem;
-  margin-bottom: -2px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.view-switch__option:hover {
-  background: #eef2f6;
-}
-
-.view-switch__option.is-selected {
-  border-bottom-color: var(--colour-accent);
-  color: var(--colour-accent);
-}
-
-.view-switch__hint {
-  font-weight: 400;
-  font-size: 0.78rem;
   color: var(--colour-text-muted);
 }
 
-.view-switch__option.is-selected .view-switch__hint {
+/* Sits on the same line as the link when there is room, and wraps beneath when there is not. */
+.share-scope {
+  flex: 1 1 18rem;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--colour-text-muted);
+}
+
+/* --- Buttons ------------------------------------------------------------ */
+
+button.compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.6rem;
+}
+
+/*
+ * Icon-only buttons.
+ *
+ * 28px square, which clears the 24px minimum target size WCAG 2.2 asks for. Removing the label
+ * must not also remove the ability to hit the thing — and every one of these carries visually
+ * hidden text plus a title, so the accessible name is never the icon.
+ */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--colour-text-muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: #eef2f6;
+  border-color: var(--colour-border);
   color: var(--colour-accent);
+}
+
+.icon-button:focus-visible {
+  border-color: var(--colour-accent);
+}
+
+.icon-button--danger:hover {
+  background: #fdeaea;
+  border-color: #8a1c1c;
+  color: #8a1c1c;
+}
+
+.reply-button {
+  color: var(--colour-accent);
+}
+
+/* --- The document ------------------------------------------------------- */
+
+.document {
+  font-size: 1.02rem;
+  line-height: 1.7;
+  padding: 1.25rem 1.5rem;
+  background: #ffffff;
+}
+
+.passage--heading {
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 1.4rem 0 0.4rem;
+}
+
+.passage--heading[data-level='1'] {
+  font-size: 1.6rem;
+}
+.passage--heading[data-level='2'] {
+  font-size: 1.35rem;
+}
+.passage--heading[data-level='3'] {
+  font-size: 1.15rem;
+}
+.passage--heading[data-level='4'],
+.passage--heading[data-level='5'],
+.passage--heading[data-level='6'] {
+  font-size: 1.02rem;
+}
+
+/* The first block should not push itself away from the top of the page. */
+.passage-row:first-child .passage--heading {
+  margin-top: 0;
+}
+
+.passage--listItem {
+  display: flex;
+  gap: 0.6rem;
+  margin: 0.05rem 0;
+}
+
+.doc-bullet {
+  flex: 0 0 1.4rem;
+  text-align: right;
+  color: var(--colour-text-muted);
+  user-select: none;
+}
+
+.passage--quote {
+  border-left: 4px solid var(--colour-border);
+  padding-left: 0.9rem;
+  color: var(--colour-text-muted);
+  font-style: italic;
+  margin: 0.6rem 0;
+}
+
+.passage--code {
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.9rem;
+  background: #f4f6f8;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.8rem;
+  margin: 0.6rem 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.passage--tableCell {
+  border-bottom: 1px solid var(--colour-border);
+  padding: 0.3rem 0;
+}
+
+/* --- Exact rendering ---------------------------------------------------- */
+
+.exact-rendering {
+  margin-top: 1.5rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.9rem;
+}
+
+.exact-rendering > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.25rem 0;
+}
+
+.exact-rendering[open] > summary {
+  margin-bottom: 0.5rem;
 }
 
 .view-note {
@@ -394,8 +496,6 @@ button.danger:hover {
   border: 1px solid var(--colour-border);
   border-radius: var(--radius);
   padding: 0.75rem;
-  max-height: 40rem;
-  overflow-y: auto;
 }
 
 .passage-row {
@@ -406,10 +506,16 @@ button.danger:hover {
 
 .passage {
   flex: 1;
-  margin: 0.25rem 0;
-  padding: 0.25rem 0.4rem;
+  margin: 0.35rem 0;
+  padding: 0.15rem 0.4rem;
   border-radius: var(--radius);
   border-left: 3px solid transparent;
+}
+
+.document-hint {
+  font-size: 0.88rem;
+  color: var(--colour-text-muted);
+  margin: 0 0 0.5rem;
 }
 
 .passage--selected {
@@ -540,12 +646,28 @@ button.danger:hover {
 
 .comment-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.25rem;
+  align-items: center;
 }
 
-.comment-actions button {
-  font-size: 0.8rem;
-  padding: 0.2rem 0.5rem;
+/*
+ * Revealed on hover for pointer users, and always present once anything inside has focus, because
+ * a keyboard user cannot hover. `:focus-within` rather than `:focus-visible` on the buttons: the
+ * whole group has to stay visible while focus moves between edit and delete.
+ */
+.comment:not(:hover) .comment-actions:not(:focus-within) .icon-button {
+  opacity: 0.35;
+}
+
+.comment-actions__prompt {
+  font-size: 0.82rem;
+  color: var(--colour-text-muted);
+}
+
+@media (hover: none) {
+  .comment-actions .icon-button {
+    opacity: 1;
+  }
 }
 
 .agent-badge {

@@ -116,6 +116,36 @@ reviewer selects from a transcript rather than from the rendered page. For a rev
 fair trade — and the alternative, rendering uploaded HTML on the application origin so the DOM is
 reachable, is the exact thing Principle IV exists to forbid.
 
+### ⚠ Follow-up (2026-07-26): the flat transcript was the wrong surface to show
+
+The paragraph above conceded a cost — "plain text rather than the styled document" — and treated
+it as settled. It was not. Shown the working product, the first reaction was that the transcript
+is an implementation artifact and that a reviewer wants to read and comment on the *document*.
+That is correct, and the concession above framed a false choice: **styled** and **on the
+application origin as HTML** are not the same thing.
+
+**Resolution**: the server also describes the document as *structure* —
+`DocumentProjection.Project` turns the sanitized HTML into an ordered list of blocks, each with a
+type drawn from a closed enum (`paragraph`, `heading`, `listItem`, `quote`, `code`, `tableCell`),
+a level, text, and offsets into the very same text projection. The client renders those blocks
+with its own components.
+
+The security property is unchanged, and worth stating precisely: **no uploaded element, attribute,
+style, or URL crosses into the application origin.** An uploaded document contributes text and a
+choice from a fixed enum. `dangerouslySetInnerHTML` remains banned by lint. A sanitizer bypass
+still lands only in the isolated preview origin, exactly as before.
+
+What this buys is that the reviewer reads a document with its headings, lists and quotations
+intact, and comments on it directly. The offsets are the same offsets, so a comment made this way
+and a comment made by an agent reading the flat text address the same characters — enforced by
+`DocumentProjectionTests`, which asserts that concatenating the block texts reproduces the flat
+projection byte for byte. If those two ever diverged, every stored offset would silently shift and
+comments would quietly point at the wrong words.
+
+The rendered preview remains, behind a disclosure, for the one job it is uniquely good at:
+showing exactly how the file renders. It is still not commentable, and it still cannot be, for all
+the reasons above.
+
 **Library direction**: `dom-anchor-text-quote` / `dom-anchor-text-position` were the intended
 starting point, and are no longer a good fit — they resolve against a DOM, and the surface here is
 a string. The same algorithm (quote first, context to disambiguate, position as a hint,
