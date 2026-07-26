@@ -15,6 +15,10 @@
 - Q: What accessibility standard applies? → A: WCAG 2.1 Level AA across all user-facing flows, including keyboard-only commenting and screen-reader announcement of presence changes.
 - Q: What limits constrain human users, given only agents are rate-limited? → A: A per-user cap on simultaneously live files, plus a per-user upload rate limit.
 
+### Session 2026-07-26 (notification channel)
+
+- Q: The original description asked for email or Teams notifications, but Graph `Mail.Send` (Application) is Critical/Restricted and app-only access to it is not supported in the Microsoft tenant. What channel should notifications use? → A: **In-app only.** Notifications appear in a list inside BlinkMark. FR-034 to FR-040 are channel-agnostic and are unaffected. This removes the need for any admin-consented Graph permission, and therefore removes the SPACE admin-consent request from the delivery path entirely. Email or Teams can be added later without redesign, because the queue, coalescing, and recipient resolution are channel-independent.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Share a draft and preview it safely (Priority: P1) 🎯 MVP
@@ -82,7 +86,7 @@ A review is taking longer than a day. The person who uploaded the file sees how 
 
 ### User Story 4 - Find out when someone comments (Priority: P4)
 
-The person who shared a file does not sit watching it. When a reviewer leaves a comment, the uploader gets a notification by email or in Teams telling them who commented on which file, with a link straight to it. People who have already commented on the file hear about replies too. Nobody is forced to receive a flood — notifications for a burst of activity arrive together rather than one per comment.
+The person who shared a file does not sit watching it. When a reviewer leaves a comment, the uploader sees a notification in BlinkMark telling them who commented on which file, with a link straight to it. People who have already commented on the file hear about replies too. Nobody is forced to receive a flood — notifications for a burst of activity arrive together rather than one per comment.
 
 **Why this priority**: It closes the review loop and drives return visits, but every scenario in US1–US3 works without it. It is also the piece most safely deferred, since reviewers can be told about comments out of band.
 
@@ -307,7 +311,7 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 - **Agent Session**: A representation of an AI agent acting for a specific user, carrying the agent's identity, the represented user, and the granted permissions. Cannot outlive the user's consent.
 - **Audit Entry**: An immutable record of one action: who, what, which target, when, the outcome, and whether an agent was acting. Outlives the file it refers to.
 - **Presence Session**: A live indication that one person currently has a file open — the user, the file, when they arrived, when they were last confirmed present, and whether they are present by way of an agent. Purely transient: it never becomes history, and it disappears with the session or the file.
-- **Notification**: A pending or delivered message to a user about activity on a file, with its recipient, trigger, delivery channel, and state.
+- **Notification**: An unread or read message to a user about activity on a file, with its recipient, trigger, and state. Delivered in-app; the channel is deliberately not part of the entity, so adding one later does not change its shape.
 
 ## Success Criteria *(mandatory)*
 
@@ -324,7 +328,7 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 - **SC-009**: 100% of auditable actions produce a retrievable audit entry, and 100% of those entries remain retrievable after the file they describe has been deleted.
 - **SC-010**: Zero comments are lost or silently relocated when file content changes; every comment is either correctly anchored or explicitly marked orphaned with its original quoted context.
 - **SC-011**: 90% of reviewers successfully attach a comment to their intended passage on the first attempt.
-- **SC-012**: File owners are notified of new comment activity within 5 minutes for 95% of events, and no user action ever fails because of a notification problem.
+- **SC-012**: File owners have a notification of new comment activity visible to them in BlinkMark within 5 minutes for 95% of events, and no user action ever fails because of a notification problem.
 - **SC-013**: An AI agent can discover the available operations and complete a read-file-then-comment task for its user without any human-authored integration documentation.
 - **SC-014**: Zero cases of an agent accessing content its represented user could not access, and zero cases of an agent acting for a user with no active session, verified by automated authorization probing.
 - **SC-015**: 100% of agent-initiated actions are distinguishable from direct user actions in the audit trail.
@@ -349,7 +353,7 @@ A reviewer opens a shared draft and immediately sees that three colleagues are r
 - The maximum accepted upload size is 10 MB per file, and supported extensions are `.html`, `.htm`, `.md`, and `.markdown`. These are configurable operational limits rather than product promises.
 - A single file per upload; multi-file bundles, archives, and HTML with local asset dependencies are out of scope for this feature.
 - Files are immutable once uploaded. Producing a corrected draft means uploading a new file, which is a new file with its own comments; re-anchoring comments across versions is out of scope. Orphaning is therefore not caused by users editing content — it arises when an anchor cannot be resolved against the render being displayed, principally because the rendering or sanitization behaviour changed between upload and display, or because a passage is too ambiguous to match confidently.
-- Notification delivery uses the organization's existing email and collaboration platform, so no separate messaging subscription or per-message cost is introduced, and no separate recipient address book is maintained.
+- Notifications are delivered **in-app**, in BlinkMark's own notification list, rather than by email or Teams. The original description asked for email or Teams; that turned out not to be available. Microsoft's Entra mail-permission guidance rates Graph `Mail.Send` (Application) as Critical and Restricted, and states that the Microsoft tenant does not currently support app-only access to it — and notifications are produced by a background job with no signed-in user, so a delegated permission cannot substitute. Teams activity-feed delivery needs a registered Teams app and its own consent path. In-app delivery satisfies FR-034 to FR-040 as written, since those requirements say *notify* rather than naming a channel, and it removes the need for any admin-consented permission at all. The cost is real and accepted: a person who is not in BlinkMark does not find out until they next open it, so the 5-minute target in SC-012 measures when the notification becomes visible in the product, not when it reaches someone's attention. Email or Teams delivery remains a later addition, not a redesign, because the queue, coalescing, and recipient resolution are channel-independent.
 - Audit entries are written for compliance but are not readable through the product in this phase. There is no administrator or compliance role, no audit browsing or export interface, and no operational runbook describing retrieval — operational documentation is out of scope for this phase. The audit trail's job here is to exist, be complete, and be tamper-resistant.
 - Download is deliberately owner-only. A downloaded copy leaves the retention perimeter permanently, so restricting it to the one person who already had the content limits fan-out without making the retention promise meaningless. The file format of the downloaded content-plus-comments bundle is an implementation decision for the plan, not a product promise.
 - The service runs best-effort from a single region with local redundancy. There is no disaster recovery, no cross-region failover, no backup, and no restore capability. An infrastructure failure may permanently lose files and their comments; owners hold the original content and re-upload, and lost review commentary is an accepted cost of keeping the service cheap. This trade-off is a deliberate consequence of content being short-lived by design.

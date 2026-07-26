@@ -1,0 +1,54 @@
+<!doctype html>
+<!--
+  Parser-differential payloads (mXSS).
+
+  The most interesting file in the corpus. Nothing here relies on the sanitizer missing a tag it
+  knows about. Each payload relies on the sanitizer's parser and the browser's parser building
+  *different* trees from the same bytes, so the sanitizer inspects a document in which nothing is
+  dangerous and emits a serialization that the browser reads as something else entirely.
+
+  This is not hypothetical: CVE-2026-54570 is exactly this shape, which is why the dependency
+  pinning in Directory.Packages.props is a security control rather than housekeeping.
+
+  Expectation: no <img>, <script>, or event handler appears in the render artifact after a
+  round trip through the browser's parser.
+-->
+<html>
+  <body>
+    <!-- MathML annotation-xml as an HTML integration point. -->
+    <math>
+      <annotation-xml encoding="text/html">
+        <title><a encoding="</title><img src=x onerror=alert('mxss-annotation')>"></a></title>
+      </annotation-xml>
+    </math>
+
+    <!-- The same idea through <style> as an RCDATA element. -->
+    <math>
+      <annotation-xml encoding="application/xhtml+xml">
+        <style><a encoding="</style><img src=x onerror=alert('mxss-style')>"></a></style>
+      </annotation-xml>
+    </math>
+
+    <!-- Foreign content confusion via SVG. -->
+    <svg>
+      <foreignObject>
+        <title><p title="</title><img src=x onerror=alert('mxss-svg')>"></p></title>
+      </foreignObject>
+    </svg>
+
+    <!-- Unescaped angle brackets in an attribute value, re-parsed after serialization. -->
+    <div title="&lt;img src=x onerror=alert('mxss-attribute')&gt;">Attribute payload</div>
+
+    <!-- noembed and noframes are parsed as raw text by some parsers and as markup by others. -->
+    <noembed><img src="x" onerror="alert('mxss-noembed')" /></noembed>
+    <noframes><img src="x" onerror="alert('mxss-noframes')" /></noframes>
+
+    <!-- Comment that does not close the way a naive scanner expects. -->
+    <!--> <img src="x" onerror="alert('mxss-comment')" /> -->
+
+    <!-- Template content, which is inert in the source document and live once cloned. -->
+    <template><img src="x" onerror="alert('mxss-template')" /></template>
+
+    <p>Body text that must survive.</p>
+  </body>
+</html>

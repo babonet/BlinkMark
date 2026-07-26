@@ -1,0 +1,73 @@
+<!doctype html>
+<!--
+  A benign document, kept in the hostile corpus on purpose.
+
+  Sanitization tests that only prove "the bad thing was removed" are half a test. This file
+  proves the other half: that ordinary review content survives intact. A sanitizer that strips
+  everything passes every negative assertion and is useless.
+
+  Expectation: every element below appears in the render artifact, and the text projection
+  contains the readable prose in document order.
+-->
+<html>
+  <head>
+    <title>Q3 architecture review</title>
+  </head>
+  <body>
+    <h1>Q3 architecture review</h1>
+
+    <p>
+      This paragraph contains <strong>bold</strong>, <em>italic</em>, and <code>inline code</code>,
+      all of which must survive sanitization.
+    </p>
+
+    <h2>Findings</h2>
+
+    <ul>
+      <li>The ingest path is the bottleneck.</li>
+      <li>Retention is enforced by the platform, not by a job.</li>
+      <li>The audit trail outlives the content it describes.</li>
+    </ul>
+
+    <ol>
+      <li>First</li>
+      <li>Second</li>
+    </ol>
+
+    <blockquote>
+      <p>A quoted passage that a reviewer might well want to comment on.</p>
+    </blockquote>
+
+    <pre><code>var x = 1;
+if (x &gt; 0) {
+  return x;
+}</code></pre>
+
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Component</th>
+          <th scope="col">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Ingest</td>
+          <td>At risk</td>
+        </tr>
+        <tr>
+          <td>Retention</td>
+          <td>Healthy</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>A relative link to <a href="#findings">the findings section</a> must survive.</p>
+
+    <hr />
+
+    <p>The duplicate passage problem appears twice in this document.</p>
+    <p>Some intervening text so the two are not adjacent.</p>
+    <p>The duplicate passage problem appears twice in this document.</p>
+  </body>
+</html>

@@ -17,9 +17,10 @@ that will bite if you skip them.
 | Azure Developer CLI (`azd`) | latest | One-command environment |
 | Docker | latest | Local Redis, Cosmos and Azurite emulators |
 
-An Azure subscription and permission to register an application in the tenant. Registration
-requires an admin to consent to the Graph `Mail.Send` application permission — start that request
-early, it is the usual long pole.
+An Azure subscription and permission to register an application in the tenant. **No admin consent
+is required**: BlinkMark requests only delegated `User.Read`, which each user consents to for
+themselves. Notifications are delivered in-app rather than by email precisely so that no
+admin-consented permission is needed (research.md R9).
 
 ---
 
@@ -125,8 +126,9 @@ for every data service.
   Expiry API. Files live in the HNS account; audit and queues live in the standard account.
 - **Set the App Insights daily cap during provisioning.** Uncapped ingestion will be your largest
   bill line, larger than all compute combined.
-- **Constrain `Mail.Send` with an Application Access Policy.** Ungranted, that permission can send
-  as any mailbox in the tenant. Scope it to the single service mailbox before first send.
+- **Notifications are in-app, and that is deliberate.** Do not reach for Graph `Mail.Send`: it is
+  rated Critical/Restricted and app-only access to it is not supported in the Microsoft tenant.
+  Adding email later means mailbox-scoped Resource Specific Consent, not a tenant-wide permission.
 - **Container Apps `min-replicas` stays at 1** on the API. Scale-to-zero adds cold start to the
   1-second preview budget (SC-002).
 - **Redis Basic C0 has no SLA and restarts without warning.** That is expected and acceptable: it

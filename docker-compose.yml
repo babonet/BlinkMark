@@ -1,0 +1,65 @@
+# Local development only.
+#
+# Nothing here is a credential for a real resource. The emulators below use their published,
+# well-known development identities, which exist precisely so that no real secret is needed.
+# Deployed environments use managed identity exclusively and have local authentication disabled
+# (Principle VII / SFI Safe Secrets Standard) — there is no connection string to leak.
+
+name: blinkmark
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: blinkmark-redis
+    ports:
+      - '6379:6379'
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: blinkmark-azurite
+    ports:
+      - '10000:10000' # blob
+      - '10001:10001' # queue
+      - '10002:10002' # table
+    command:
+      - azurite
+      - '--blobHost'
+      - '0.0.0.0'
+      - '--queueHost'
+      - '0.0.0.0'
+      - '--tableHost'
+      - '0.0.0.0'
+      - '--location'
+      - /data
+      - '--skipApiVersionCheck'
+    volumes:
+      - azurite-data:/data
+    healthcheck:
+      test: ['CMD', 'nc', '-z', '127.0.0.1', '10000']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  cosmos:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview
+    container_name: blinkmark-cosmos
+    ports:
+      - '8081:8081'
+    environment:
+      PROTOCOL: https
+      ENABLE_EXPLORER: 'false'
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -ks https://localhost:8081/_explorer/emulator.pem > /dev/null || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+volumes:
+  azurite-data:

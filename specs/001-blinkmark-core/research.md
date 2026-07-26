@@ -80,12 +80,48 @@ quote-first, position as a hint, using approximate matching.
 - *XPath or CSS-path anchors*: rejected outright by Principle III, and brittle across sanitization.
 - *Character offsets alone*: cheapest, but a single inserted character upstream shifts every
   anchor, and it cannot produce a meaningful orphan message.
-- *Server-side anchor resolution*: rejected. It would require the server to hold a DOM per
-  request, adding latency against SC-003's 300 ms budget; the client already has the rendered DOM.
+- *Server-side anchor resolution*: rejected for the read path on latency grounds — holding a DOM
+  per request would eat into SC-003's 300 ms budget. It is still done at *write* time, where one
+  resolution per comment is affordable and catches an anchor an agent supplied against text that
+  is not there.
 
-**Library direction**: the Hypothesis-lineage approach (`dom-anchor-text-quote` /
-`dom-anchor-text-position`, backed by approximate string matching) is the reference
-implementation of exactly this model and is the intended starting point for the frontend.
+### ⚠ Correction (2026-07-26): the client does not have the rendered DOM
+
+The original text rejected server-side resolution on the grounds that "the client already has the
+rendered DOM". **It does not.** R3 puts the preview on a separate origin inside an
+`<iframe sandbox>` with no `allow-same-origin`, precisely so that a sanitizer bypass lands
+somewhere with no access to the application. That isolation is mutual: the SPA cannot read the
+framed document's DOM, cannot observe a selection inside it, and cannot receive a `postMessage`
+from it, because the sandbox grants no script capability either.
+
+This is the same shape of mistake as the preview-authorization gap: a property Principle IV
+removes on purpose was still being assumed by another decision.
+
+**Resolution**: the SPA does not anchor against the preview DOM. It anchors against the
+**normalized text projection**, which it fetches from `GET /api/files/{fileId}/content`, and
+renders as a selectable transcript beside the visual preview. Commenting happens on the
+transcript; the iframe remains the faithful visual rendering.
+
+That turns out better than the original plan rather than merely acceptable:
+
+- The projection is exactly what the server resolves against and exactly what agents read
+  (FR-051). Client, server, and agent now agree on the anchoring surface **by construction**,
+  rather than by three implementations happening to normalize a DOM the same way.
+- Offsets are offsets into a known string, so there is no DOM-walking step to get subtly wrong
+  across browsers.
+- Principle IV's isolation stays completely intact. No hole is opened to make commenting work.
+
+The cost is that the commenting surface is plain text rather than the styled document, so a
+reviewer selects from a transcript rather than from the rendered page. For a review tool this is a
+fair trade — and the alternative, rendering uploaded HTML on the application origin so the DOM is
+reachable, is the exact thing Principle IV exists to forbid.
+
+**Library direction**: `dom-anchor-text-quote` / `dom-anchor-text-position` were the intended
+starting point, and are no longer a good fit — they resolve against a DOM, and the surface here is
+a string. The same algorithm (quote first, context to disambiguate, position as a hint,
+approximate match, then orphan) is implemented directly over the projection in
+`frontend/src/services/anchoring.ts`, mirroring `AnchorService` on the server so the two cannot
+drift.
 
 ---
 
@@ -267,23 +303,55 @@ in the product reads audit entries in this phase.
 
 ## R9. Notifications
 
-**Decision**: Comment events enqueue a message to a Storage Queue. A KEDA queue-scaled Container
-App drains it, coalesces events per recipient per file over a short window, and sends email via
-Microsoft Graph using an application permission (`Mail.Send`) constrained by an **Application
-Access Policy** to a single dedicated service mailbox. Teams delivery is deferred.
+**Decision (revised 2026-07-26)**: Comment events enqueue a message to a Storage Queue. A KEDA
+queue-scaled Container App drains it, coalesces events per recipient per file over a short window,
+and writes a notification record that the user sees **in BlinkMark's own notification list**. There
+is no email and no Teams delivery.
 
-**Rationale**:
+**Why this changed.** The original decision was to send email via Microsoft Graph using the
+`Mail.Send` application permission, constrained by an Application Access Policy to a single service
+mailbox. That is not available. Microsoft's Entra mail-permission guidance rates Graph `Mail.Send`
+(Application) as **Critical / Restricted** and states that the Microsoft tenant *"does not
+currently support app-only access to Mail.Send due to the extreme risk"*. The Application Access
+Policy was the mitigation that made the original plan defensible to a reviewer; it does not help if
+the permission cannot be granted in the first place.
 
-- FR-037 requires that notification failure never affects the user action. Enqueue-and-forget is
-  the only shape that guarantees this; the enqueue is the only synchronous work.
-- FR-038's consolidation requirement needs a delay window, which a queue consumer provides
-  naturally and a synchronous path cannot.
-- An unconstrained `Mail.Send` application permission can send as *any* mailbox in the tenant.
-  The Application Access Policy narrowing it to one service mailbox is what makes that permission
-  grant defensible to a security reviewer, and it should be treated as mandatory, not optional.
-- The spec says "email **or** Teams", so email alone satisfies FR-034/FR-035. Teams activity-feed
-  notifications require a registered Teams app and a separate consent path; that is real scope
-  for no additional requirement coverage in this phase.
+**Rationale for in-app**:
+
+- FR-034 to FR-040 say *notify*. They never name a channel, so in-app delivery satisfies them as
+  written — this is a change of mechanism, not of requirement.
+- It removes the need for **any** admin-consented permission. No SPACE request, no App Admin
+  Consent, no SDL/Privacy/RAI review gate on the notification path, and nothing for a tenant
+  administrator to approve. For a product whose compliance posture is otherwise credential-free,
+  removing the single high-risk grant is a material simplification rather than a consolation.
+- The asynchronous shape is unchanged and still required. FR-037 says a notification failure must
+  never affect the user action, so the enqueue remains the only synchronous work. Everything
+  downstream — coalescing, recipient resolution, preference checks — is identical to what an email
+  path would have needed, which is why adding email or Teams later is an addition rather than a
+  redesign.
+- FR-038's consolidation still needs a delay window, which the queue consumer provides naturally.
+  `coalesceKey` (recipient + file + window) does the grouping regardless of where the result is
+  delivered.
+
+**The cost, stated plainly**: a person who is not in BlinkMark does not learn about a comment until
+they next open it. That is a genuine regression against the original intent of US4, which was to
+pull someone back to a review they had stopped watching. SC-012's five-minute target now measures
+when a notification becomes *visible in the product*, not when it reaches someone's attention. US4
+remains P4 and remains the piece most safely deferred, so this is an acceptable trade for the
+hackathon and a known gap for anything beyond it.
+
+**Alternatives considered**:
+
+- *Mailbox-scoped Resource Specific Consent*: what the mail guidance actually recommends instead of
+  a tenant-wide application permission. Viable, and the right answer if email becomes necessary,
+  but it is still a consent path with a review behind it and it buys nothing for US4's P4 status.
+- *Teams activity feed*: deferred in the original R9 and still deferred. It requires a registered
+  Teams app and a separate consent path, which is more scope than the requirement justifies.
+- *Delegated `Mail.Send` with the commenter as the signed-in user*: rejected. Delivery is
+  asynchronous by construction (FR-037) and no user is present at send time. Making it synchronous
+  to obtain a user context would trade a hard requirement for a soft one.
+- *A separate SMTP relay or third-party mail service*: rejected. It reintroduces exactly the
+  retrievable credential that Principle VII exists to eliminate.
 
 ---
 
@@ -430,9 +498,10 @@ the preview-token signing key from R13. Rather than storing it as a secret, it i
 key**, and the API signs through the Key Vault sign operation using its managed identity. The key
 material never reaches the application. BlinkMark therefore holds no retrievable secret at all.
 
-**Graph mail sending.** The `Mail.Send` application permission is granted to the **managed
-identity's** service principal rather than to a secret-bearing app registration, and remains
-constrained by an Application Access Policy to one service mailbox (R9).
+**No Graph application permission at all.** The original design needed `Mail.Send` granted to the
+managed identity's service principal. R9 was revised to deliver notifications in-app, so that grant
+is gone. BlinkMark now holds no admin-consented permission of any kind — the only Graph access left
+is delegated `User.Read`, which every signed-in user consents to for themselves.
 
 **Deployment identity.** `azd` and GitHub Actions authenticate by workload identity federation.
 No publish profile, no Static Web Apps deployment token, no service principal secret. The Static

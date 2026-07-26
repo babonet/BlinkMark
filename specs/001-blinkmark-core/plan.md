@@ -107,7 +107,7 @@ backend/
 │   │   ├── Anchoring/
 │   │   ├── Retention/
 │   │   └── Quotas/
-│   ├── BlinkMark.Infrastructure/       # Adapters: Cosmos, Blob, Tables, Queues, Redis, Graph
+│   ├── BlinkMark.Infrastructure/       # Adapters: Cosmos, Blob, Tables, Queues, Redis, Key Vault
 │   ├── BlinkMark.Api/                  # REST + SSE + MCP endpoint (Container App, min 1 replica)
 │   │   ├── Endpoints/
 │   │   ├── Mcp/
@@ -238,7 +238,7 @@ Complexity Tracking entry.
 | Sanitizer upgrade silently invalidates stored anchors | Comments orphan en masse | `renderVersion` pinned per file; upgrades apply to new uploads only |
 | Table Storage immutability is application-enforced, not platform-enforced | Weaker compliance posture than the wording implies | Documented in R8 with a dual-write escalation path; audit account carries a resource lock |
 | Redis Basic C0 has no SLA and restarts without warning | Presence drops | Expected and acceptable — FR-069 requires the product to work without it; verify by stopping Redis |
-| Graph `Mail.Send` application permission can send as any mailbox | Serious over-grant | Application Access Policy scoped to one service mailbox, treated as mandatory before first send; permission granted to the managed identity, not to a secret-bearing app |
+| In-app notifications only reach someone who opens BlinkMark (R9, revised) | US4 no longer pulls a reviewer back to a review they stopped watching, which was its point | Accepted for now. `Mail.Send` app-only access is not available in the tenant, so email was not an option to trade against. The queue, coalescing, and recipient resolution are channel-independent, so adding mailbox-scoped RSC email or a Teams activity feed later is an addition rather than a redesign |
 | App Insights ingestion becomes the largest bill line | Cost overrun | Daily cap set at provisioning; audit deliberately not routed there |
 | A future change re-enables local auth on a resource and silently regresses SFI | Compliance regression invisible in review | CI asserts local auth is disabled on every provisioned resource and fails the build, rather than reporting a warning (T129) |
 | Private endpoints break local development and emulator workflows | Developer friction, temptation to re-enable public access | Local development uses emulators over `docker compose`; no developer ever needs data-plane access to a deployed resource |

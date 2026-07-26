@@ -1,0 +1,46 @@
+<!doctype html>
+<!--
+  Frame-busting and framing manipulation.
+
+  Preview content is rendered inside a sandboxed iframe. These payloads try to escape it, reach
+  the parent, or navigate the top-level window away — the last of which would be a convincing
+  phishing redirect from inside what the reader believes is their own organization's tool.
+
+  Expectation: all of it is removed at sanitization, and the `sandbox` attribute plus the
+  response CSP would block anything that survived. Both layers are asserted, because Principle IV
+  requires isolation *and* sanitization rather than either alone.
+-->
+<html>
+  <body>
+    <h1>Quarterly review</h1>
+
+    <script>
+      // Classic frame busting.
+      if (top !== self) {
+        top.location = 'https://evil.example.com/phish';
+      }
+
+      // Reaching into the embedding application.
+      parent.postMessage({ steal: document.cookie }, '*');
+      window.parent.document.body.innerHTML = 'replaced';
+
+      // Opening a window that keeps a handle on the opener.
+      const w = window.open('https://evil.example.com', '_blank');
+      w.opener.location = 'https://evil.example.com/phish';
+    </script>
+
+    <!-- Same intent, no script required. -->
+    <a href="https://evil.example.com/phish" target="_top">Continue</a>
+    <a href="https://evil.example.com/phish" target="_parent">Back</a>
+
+    <base href="https://evil.example.com/" />
+
+    <form action="https://evil.example.com/phish" target="_top">
+      <button type="submit">Sign in to continue</button>
+    </form>
+
+    <meta http-equiv="refresh" content="0;url=https://evil.example.com/phish" />
+
+    <p>Document text that must survive.</p>
+  </body>
+</html>

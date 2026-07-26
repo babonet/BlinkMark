@@ -1,0 +1,385 @@
+/*
+ * Colour choices below are checked against WCAG 2.1 AA contrast (4.5:1 for body text, 3:1 for
+ * large text and interactive boundaries). Clarification Q4 makes that a delivery requirement
+ * rather than a nice-to-have, so it belongs in the stylesheet rather than in a later audit.
+ */
+
+:root {
+  --colour-background: #ffffff;
+  --colour-surface: #f4f5f7;
+  --colour-text: #1a1c1f;
+  --colour-text-muted: #4a4f57;
+  --colour-accent: #0f4c81;
+  --colour-accent-text: #ffffff;
+  --colour-border: #6b7280;
+  --colour-warning-surface: #fff4e5;
+  --colour-warning-text: #6b3b00;
+  --colour-danger: #8a1c1c;
+  --radius: 6px;
+  --focus-ring: 3px solid #0f4c81;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--colour-text);
+  background: var(--colour-background);
+}
+
+/* Never removed, only restyled. An invisible focus indicator makes keyboard use impossible. */
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  padding: 0.75rem 1rem;
+  background: var(--colour-accent);
+  color: var(--colour-accent-text);
+  z-index: 100;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--colour-border);
+}
+
+.app-header nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.app-header ul {
+  display: flex;
+  gap: 1rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.app-brand {
+  font-weight: 700;
+  font-size: 1.125rem;
+  text-decoration: none;
+  color: var(--colour-text);
+}
+
+.app-account {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--colour-text-muted);
+}
+
+main {
+  flex: 1;
+  padding: 1.5rem;
+  max-width: 72rem;
+  width: 100%;
+  margin: 0 auto;
+}
+
+button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--colour-accent);
+  border-radius: var(--radius);
+  background: var(--colour-accent);
+  color: var(--colour-accent-text);
+  cursor: pointer;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--colour-accent);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+a {
+  color: var(--colour-accent);
+}
+
+/*
+ * Notices. These carry FR-057 and FR-075 — the access scope and the fact that there is no
+ * backup. They are styled to be read rather than dismissed, because a user who discovers either
+ * of these facts after the event has already been harmed by them.
+ */
+.scope-notice,
+.retention-notice {
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--colour-warning-text);
+  background: var(--colour-warning-surface);
+  color: var(--colour-warning-text);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.error {
+  color: var(--colour-danger);
+  font-weight: 600;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--colour-border);
+}
+
+.preview-region {
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+}
+
+.preview-region iframe {
+  width: 100%;
+  min-height: 32rem;
+  border: 0;
+  background: var(--colour-background);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sign-in {
+  max-width: 32rem;
+  margin: 6rem auto;
+  text-align: left;
+}
+
+.comment-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.comment {
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+}
+
+/*
+ * Orphaned comments are visually distinct AND announced. Principle III says a comment that loses
+ * its passage must remain visible with its context; FR-079 says that state cannot be conveyed by
+ * appearance alone, so the markup carries it too.
+ */
+.comment.orphaned {
+  border-style: dashed;
+  background: var(--colour-warning-surface);
+}
+
+.comment-quote {
+  font-style: italic;
+  color: var(--colour-text-muted);
+  border-left: 3px solid var(--colour-border);
+  padding-left: 0.6rem;
+  margin: 0.35rem 0;
+}
+
+.presence-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ---------------------------------------------------------------------------
+ * Commenting surface
+ *
+ * The document is shown twice on this page and that is deliberate: the iframe is the faithful
+ * visual render and cannot be read from the application, so the transcript beside it is what a
+ * reviewer actually selects from (research.md R2).
+ * ------------------------------------------------------------------------ */
+
+.file-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 60rem) {
+  .file-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.passage-list {
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  max-height: 40rem;
+  overflow-y: auto;
+}
+
+.passage-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.passage {
+  flex: 1;
+  margin: 0.25rem 0;
+  padding: 0.25rem 0.4rem;
+  border-radius: var(--radius);
+  border-left: 3px solid transparent;
+}
+
+.passage--selected {
+  background: #dce9f5;
+  border-left-color: var(--colour-accent);
+}
+
+/*
+ * A commented passage is marked visually AND labelled for assistive technology in the markup
+ * (FR-079). The underline is not the message, it is a shortcut to the message.
+ */
+.passage--commented {
+  border-left-color: var(--colour-accent);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 0.2em;
+}
+
+.passage-action {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.5rem;
+  opacity: 0;
+}
+
+/* Revealed on hover for pointer users and always present for keyboard users, who cannot hover. */
+.passage-row:hover .passage-action,
+.passage-action:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .passage-action {
+    opacity: 1;
+  }
+}
+
+.comment-compose {
+  border: 1px solid var(--colour-accent);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.comment-compose textarea,
+.comment textarea {
+  width: 100%;
+  font: inherit;
+  padding: 0.5rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+}
+
+.thread-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.comment-body {
+  /* Preserves the author's line breaks without interpreting anything (FR-024). */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0.35rem 0;
+}
+
+.comment-body--deleted {
+  color: var(--colour-text-muted);
+}
+
+.comment header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  color: var(--colour-text-muted);
+}
+
+.comment-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.comment-actions button {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.agent-badge {
+  border: 1px solid var(--colour-border);
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+}
+
+.orphan-note {
+  color: var(--colour-warning-text);
+  background: var(--colour-warning-surface);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  margin: 0.35rem 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

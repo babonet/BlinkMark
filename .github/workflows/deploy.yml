@@ -1,0 +1,181 @@
+name: Deploy
+
+# =============================================================================
+# T132 — deployment with workload identity federation.
+#
+# There is no service principal secret, no Static Web Apps deployment token, and no publish
+# profile anywhere in this file. GitHub's OIDC token is exchanged for an Azure token against a
+# federated credential on the deployment identity, so the repository holds identifiers only
+# ([SFI-ID4.1.2], Principle VII).
+#
+# The three `vars` below are identifiers, not credentials. Publishing them would be
+# uninteresting; that is the whole point.
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environmentName:
+        description: Environment discriminator
+        required: true
+        default: dev
+
+permissions:
+  # id-token: write is what makes the credential-free exchange possible.
+  id-token: write
+  contents: read
+
+env:
+  AZURE_RESOURCE_GROUP: rg-blinkmark
+  AZURE_LOCATION: eastus
+  ENVIRONMENT_NAME: ${{ github.event.inputs.environmentName || 'dev' }}
+
+jobs:
+  sfi-gate:
+    name: SFI compliance gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: ./tools/sfi-gate.ps1 -RepositoryRoot .
+
+  build-images:
+    name: Build and push container images
+    runs-on: ubuntu-latest
+    needs: [sfi-gate]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (workload identity federation)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Token-based registry login. No registry username or password is ever materialised.
+      - name: Registry login
+        run: az acr login --name ${{ vars.AZURE_CONTAINER_REGISTRY }}
+
+      - name: Build and push
+        run: |
+          set -euo pipefail
+          registry="${{ vars.AZURE_CONTAINER_REGISTRY }}.azurecr.io"
+          tag="${GITHUB_SHA}"
+          for app in api preview notifications reconciliation; do
+            docker build \
+              --file "backend/docker/${app}.Dockerfile" \
+              --tag "${registry}/blinkmark-${app}:${tag}" \
+              --tag "${registry}/blinkmark-${app}:latest" \
+              .
+            docker push "${registry}/blinkmark-${app}:${tag}"
+            docker push "${registry}/blinkmark-${app}:latest"
+          done
+
+  deploy-infrastructure:
+    name: Deploy infrastructure
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    outputs:
+      apiFqdn: ${{ steps.deploy.outputs.apiFqdn }}
+      previewFqdn: ${{ steps.deploy.outputs.previewFqdn }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (workload identity federation)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: What-if
+        run: |
+          az deployment group what-if \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              environmentName="${ENVIRONMENT_NAME}" \
+              serviceTreeId="${{ vars.BLINKMARK_SERVICE_TREE_ID }}" \
+              apiClientId="${{ vars.BLINKMARK_API_CLIENT_ID }}" \
+              spaClientId="${{ vars.BLINKMARK_SPA_CLIENT_ID }}" \
+              appOrigin="${{ vars.BLINKMARK_APP_ORIGIN }}" \
+              containerRegistryServer="${{ vars.AZURE_CONTAINER_REGISTRY }}.azurecr.io" \
+              imageTag="${GITHUB_SHA}"
+
+      - name: Deploy
+        id: deploy
+        run: |
+          set -euo pipefail
+          outputs=$(az deployment group create \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "blinkmark-${GITHUB_SHA::8}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              environmentName="${ENVIRONMENT_NAME}" \
+              serviceTreeId="${{ vars.BLINKMARK_SERVICE_TREE_ID }}" \
+              apiClientId="${{ vars.BLINKMARK_API_CLIENT_ID }}" \
+              spaClientId="${{ vars.BLINKMARK_SPA_CLIENT_ID }}" \
+              appOrigin="${{ vars.BLINKMARK_APP_ORIGIN }}" \
+              containerRegistryServer="${{ vars.AZURE_CONTAINER_REGISTRY }}.azurecr.io" \
+              imageTag="${GITHUB_SHA}" \
+            --query properties.outputs -o json)
+          echo "apiFqdn=$(echo "$outputs" | jq -r .apiFqdn.value)" >> "$GITHUB_OUTPUT"
+          echo "previewFqdn=$(echo "$outputs" | jq -r .previewFqdn.value)" >> "$GITHUB_OUTPUT"
+
+  verify-sfi-posture:
+    name: Verify SFI posture on the deployed environment
+    runs-on: ubuntu-latest
+    needs: [deploy-infrastructure]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      # T135 — assert the posture on what actually exists, not on what the templates say.
+      - shell: pwsh
+        run: ./tools/verify-sfi-posture.ps1 -ResourceGroup "$env:AZURE_RESOURCE_GROUP" -OutputPath docs/sfi-attestation.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sfi-attestation
+          path: docs/sfi-attestation.md
+
+  deploy-frontend:
+    name: Deploy frontend
+    runs-on: ubuntu-latest
+    needs: [deploy-infrastructure]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_API_ORIGIN: https://${{ needs.deploy-infrastructure.outputs.apiFqdn }}
+          VITE_PREVIEW_ORIGIN: https://${{ needs.deploy-infrastructure.outputs.previewFqdn }}
+          VITE_ENTRA_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          VITE_ENTRA_CLIENT_ID: ${{ vars.BLINKMARK_SPA_CLIENT_ID }}
+          VITE_API_SCOPE: ${{ vars.BLINKMARK_API_SCOPE }}
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      # Static Web Apps deployment tokens are a long-lived shared credential. `az staticwebapp`
+      # with a federated login does the same job with nothing to store.
+      - name: Upload static bundle
+        run: |
+          az staticwebapp environment set \
+            --name "${{ vars.AZURE_STATIC_WEB_APP }}" \
+            --environment-name default \
+            --source dist

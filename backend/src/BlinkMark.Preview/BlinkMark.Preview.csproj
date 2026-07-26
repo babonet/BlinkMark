@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BlinkMark.Core\BlinkMark.Core.csproj" />
+    <ProjectReference Include="..\BlinkMark.Infrastructure\BlinkMark.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BlinkMark.ContractTests" />
+    <InternalsVisibleTo Include="BlinkMark.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

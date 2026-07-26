@@ -1,0 +1,52 @@
+<!doctype html>
+<!--
+  External resource loads.
+
+  These are the quietest attack in the corpus, and the one FR-016 exists for. None of them run
+  code. Each simply causes the reader's browser to make a request to a server the uploader
+  controls, which discloses that a specific person opened a specific document at a specific
+  time — and, on a corporate network, their IP address as well.
+
+  Expectation: no external reference survives sanitization, and the preview response's
+  `default-src 'none'` policy would stop any that did.
+-->
+<html>
+  <head>
+    <link rel="stylesheet" href="https://evil.example.com/track.css" />
+    <link rel="preload" as="font" href="https://evil.example.com/font.woff2" crossorigin />
+    <style>
+      @import url('https://evil.example.com/import.css');
+      body {
+        background-image: url('https://evil.example.com/background.png');
+      }
+    </style>
+    <meta http-equiv="refresh" content="0; url=https://evil.example.com/redirect" />
+  </head>
+  <body>
+    <h1>Report</h1>
+
+    <!-- The classic tracking pixel. -->
+    <img src="https://evil.example.com/pixel.gif?reader=unknown" width="1" height="1" alt="" />
+
+    <!-- Same idea, other elements. -->
+    <iframe src="https://evil.example.com/frame.html"></iframe>
+    <embed src="https://evil.example.com/embed.swf" />
+    <object data="https://evil.example.com/object.pdf"></object>
+    <video src="https://evil.example.com/video.mp4" autoplay></video>
+    <audio src="https://evil.example.com/audio.mp3" autoplay></audio>
+    <source src="https://evil.example.com/source.webm" />
+    <track src="https://evil.example.com/track.vtt" />
+
+    <!-- Protocol-relative, which inherits the page scheme and is easy to miss. -->
+    <img src="//evil.example.com/protocol-relative.png" alt="" />
+
+    <!-- Background attribute, deprecated but still honoured. -->
+    <table background="https://evil.example.com/table-bg.png">
+      <tr>
+        <td>Cell</td>
+      </tr>
+    </table>
+
+    <p>Body text that must survive.</p>
+  </body>
+</html>

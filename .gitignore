@@ -1,0 +1,53 @@
+# ---------------------------------------------------------------------------
+# .NET
+# ---------------------------------------------------------------------------
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+packages/
+TestResults/
+*.trx
+*.coverage
+coverage/
+.artifacts/
+
+# ---------------------------------------------------------------------------
+# Node / frontend
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+build/
+*.log
+playwright-report/
+test-results/
+.vite/
+
+# ---------------------------------------------------------------------------
+# Environment and anything that could carry a credential
+#
+# Principle VII: BlinkMark holds no retrievable secret. These entries exist so that a local
+# experiment can never become a committed credential.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+appsettings.Local.json
+appsettings.*.Local.json
+azure.local.json
+.azure/
+
+# ---------------------------------------------------------------------------
+# Tooling / OS
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.idea/
+.vs/
