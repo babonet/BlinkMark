@@ -107,9 +107,8 @@ function NotFound() {
     <section>
       <h1>Not found</h1>
       <p>
-        That link does not point at anything. If it was a BlinkMark file, it may have expired —
-        files delete themselves, and an expired file is indistinguishable from one that never
-        existed.
+        That link does not point at anything. If it was a BlinkMark file, it may have expired — files delete
+        themselves, and an expired file is indistinguishable from one that never existed.
       </p>
       <Link to="/files">Back to my files</Link>
     </section>

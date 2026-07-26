@@ -219,12 +219,7 @@ class ApiClient {
     return this.request<Comment[]>(`/api/files/${encodeURIComponent(fileId)}/comments`);
   }
 
-  async createComment(
-    fileId: string,
-    body: string,
-    anchor: Anchor,
-    parentId?: string,
-  ): Promise<Comment> {
+  async createComment(fileId: string, body: string, anchor: Anchor, parentId?: string): Promise<Comment> {
     // Note what is not sent: an author. Identity comes from the token, server side, always
     // (FR-005, FR-023).
     return this.request<Comment>(`/api/files/${encodeURIComponent(fileId)}/comments`, {

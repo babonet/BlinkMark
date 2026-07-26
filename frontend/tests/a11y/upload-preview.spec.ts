@@ -77,7 +77,10 @@ test.describe('Preview region', () => {
   });
 
   test('the preview region is labelled, focusable, and escapable', async ({ page }) => {
-    const firstFile = page.getByRole('link').filter({ hasText: /\.(md|html)$/ }).first();
+    const firstFile = page
+      .getByRole('link')
+      .filter({ hasText: /\.(md|html)$/ })
+      .first();
     test.skip((await firstFile.count()) === 0, 'No file available to preview.');
 
     await firstFile.click();

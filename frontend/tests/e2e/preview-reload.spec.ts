@@ -40,7 +40,10 @@ test.describe('Preview token renewal', () => {
 
     await page.goto('/files');
 
-    const firstFile = page.getByRole('link').filter({ hasText: /\.(md|html)$/ }).first();
+    const firstFile = page
+      .getByRole('link')
+      .filter({ hasText: /\.(md|html)$/ })
+      .first();
     test.skip((await firstFile.count()) === 0, 'No file available to preview.');
 
     await firstFile.click();

@@ -103,20 +103,28 @@ export function PreviewFrame({ fileId, displayName, previewUrl, onPreviewUrlChan
     setStatus('ready');
   }
 
-  /** `Escape` returns focus to the application, so the frame is never a one-way trip. */
-  function handleFrameKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'Escape') {
-      wrapperRef.current?.focus();
-    }
-  }
+  /*
+   * There was an `Escape returns focus to the application` handler here. It was removed because
+   * it could not work and the instruction it advertised was false.
+   *
+   * The preview is a cross-origin sandboxed iframe, so key events inside it belong to that
+   * document and never bubble out to this one. The handler could only ever fire when the wrapper
+   * itself held focus — that is, when the user was *not* in the preview — so it did nothing in
+   * precisely the situation it claimed to rescue.
+   *
+   * Nothing replaces it, because nothing needs to: browsers include iframe content in the tab
+   * sequence and continue past it, so the preview was never a trap. The skip link above is the
+   * real affordance for jumping over it.
+   */
 
   return (
     <section aria-labelledby="preview-heading">
       <h2 id="preview-heading">Preview of {displayName}</h2>
 
       <p id="preview-instructions" className="visually-hidden">
-        This preview is a separate document. Press Enter to move into it, and Escape to return to
-        BlinkMark. Use the skip link at the top of the page to jump past the preview to the comments.
+        This preview is a separate document. Tab moves into it and continues out the other side; the skip link
+        above jumps straight to the comments. The same text is available as selectable prose below the
+        preview, which is where comments are written.
       </p>
 
       <a className="skip-link" href="#comments">
@@ -125,18 +133,16 @@ export function PreviewFrame({ fileId, displayName, previewUrl, onPreviewUrlChan
 
       {status === 'error' ? (
         <p className="error" role="alert">
-          This preview is no longer available. The file may have expired — files delete themselves,
-          and an expired file cannot be recovered.
+          This preview is no longer available. The file may have expired — files delete themselves, and an
+          expired file cannot be recovered.
         </p>
       ) : (
         <div
           ref={wrapperRef}
           className="preview-region"
-          tabIndex={0}
           role="group"
           aria-label={`Preview of ${displayName}`}
           aria-describedby="preview-instructions"
-          onKeyDown={handleFrameKeyDown}
         >
           <iframe
             ref={frameRef}

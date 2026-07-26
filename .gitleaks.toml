@@ -1,0 +1,37 @@
+# Gitleaks configuration.
+#
+# The default ruleset is kept in full and extended, never replaced. Everything below only adds
+# exceptions, and each exception is written to match one specific published constant rather than
+# a file, a directory, or a rule. That distinction matters: allowlisting `infra/**` or disabling
+# `generic-api-key` would stop the scanner reporting a genuine credential committed to those same
+# files, which is exactly the failure this scan exists to prevent.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+Azure built-in role definition IDs.
+
+These are public, fixed, documented constants that Microsoft publishes for every Azure tenant —
+they identify a role, they do not authorize anything, and knowing one grants no access. They trip
+the `generic-api-key` rule because they are 36-character high-entropy strings assigned to
+variables whose names contain "Key" (as in Key Vault).
+
+Listed individually by value. A new role ID added to the templates will be reported until it is
+added here deliberately, which keeps this list an explicit record of what has been reviewed
+rather than a blanket exemption that silently grows.
+"""
+
+regexes = [
+  # Storage Blob Data Contributor
+  '''ba92f5b4-2d11-453d-a403-e96b0029c9fe''',
+  # Storage Table Data Contributor
+  '''0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3''',
+  # Storage Queue Data Contributor
+  '''974c5e8b-45b9-4653-ba55-5f855dd0fb88''',
+  # Key Vault Crypto User — the one gitleaks reported (infra/modules/identity.bicep:58)
+  '''12338af0-0e69-4776-bea7-57ae8d297424''',
+  # Cosmos DB built-in Data Contributor (data-plane role, not Azure RBAC)
+  '''00000000-0000-0000-0000-000000000002''',
+]

@@ -488,8 +488,8 @@ the phase they belong to rather than at the end.
 | 1 — Setup | Complete |
 | 2 — Foundational | Complete |
 | 3 — US1 (MVP) | Complete — verified |
-| 4 — US2 comments | Complete — backend verified; frontend written but never compiled |
-| 5 — US3 retention | Complete — backend verified; frontend written but never compiled |
+| 4 — US2 comments | Complete — backend and frontend verified |
+| 5 — US3 retention | Complete — backend and frontend verified |
 | 6 — US4 notifications | T086 only; channel now decided (in-app), so the rest is unblocked |
 | 7 — US5 agents | Not started |
 | 8 — US6 presence | T100 only (the Redis store, built with the adapters) |
@@ -498,26 +498,43 @@ the phase they belong to rather than at the end.
 
 **Verified**: `dotnet build` clean, `dotnet test` 128 passing (18 unit, 83 integration, 27
 contract), `az bicep build` exit 0, `tools/sfi-gate.ps1` passing and proven non-vacuous against a
-deliberately violating tree.
+deliberately violating tree. Frontend: `tsc -p tsconfig.app.json` clean, `eslint` 0 errors,
+`vitest` 16 passing, `vite build` succeeds, `prettier --check` clean.
 
-**Not verified**: everything under `frontend/`. `npm install` has not been run, so no frontend
-code has been compiled, linted, or executed. This now includes the whole US2 commenting UI and
-the US3 retention and download controls, which together are the largest unverified body of code
-in the repository.
+**Still not verified**: the Playwright suites. `tests/a11y/keyboard-commenting.spec.ts` and the
+end-to-end specs need a running API, preview origin, and a signed-in user, so they have never
+executed. The keyboard commenting path is therefore *written* but not *proven*, which is exactly
+the gap the build-order warning above was about.
 
-**One manual step outstanding**: `dom-anchor-text-quote` and `dom-anchor-text-position` are still
-listed in `frontend/package.json` but are no longer used or wanted (see T062). They should be
-removed; the edit was blocked here as a dependency change.
+**One manual step outstanding**: `@types/node` is missing, so `npm run build` (which runs
+`tsc -b` across the Node-side config files) fails even though `vite build` succeeds. Add it with
+`npm i -D @types/node`.
 
-### A correction made during Phase 5
+**Dependency advisories** — see the two-tier audit gate in `.github/workflows/ci.yml`:
 
-Owner-scoped routes (`PATCH /retention`, `DELETE`, `GET /download`) answer **403, not 404**, for
-an expired file. The ownership check runs in the authorization handler, which treats "expired",
-"never existed", and "not yours" identically — so all three deny the same way and none of them
-can be told apart. That is the stronger privacy property, so the tests assert
-indistinguishability rather than a particular status code. The cost is that an owner returning to
-their own expired file sees "Forbidden" rather than "not found", which is worth revisiting in
-Phase 9 as a message problem rather than an authorization one.
+- `react-router-dom` 6.30.4 carries an open-redirect and a constructor-injection advisory. It
+  **ships to users**, and the fix requires react-router 7.18.1, a major bump. The API surface in
+  use is `BrowserRouter`, `Link`, `Navigate`, `Route`, `Routes`, `useNavigate`, `useParams` —
+  all unchanged in v7. Run `npm i react-router-dom@^7.18.1`.
+- Everything else is build-time tooling. `brace-expansion` (GHSA-mh99-v99m-4gvg) currently
+  affects *every published version* and the whole ESLint and typescript-eslint tree depends on
+  it, so no upgrade exists yet.
+
+### Corrections made while fixing CI
+
+**The preview `Escape` handler could never have worked.** `PreviewFrame` claimed Escape returned
+focus from the preview to the application. The preview is a cross-origin sandboxed iframe, so key
+events inside it never reach this document — the handler could only fire when the user was *not*
+in the preview. It has been removed along with the screen-reader instruction that advertised it,
+because a false instruction is worse than none. Nothing replaces it: browsers tab out of iframes
+normally, so the preview was never a trap, and the skip link is the real affordance.
+
+**Owner-scoped routes answer 403, not 404, for an expired file.** The ownership check runs in the
+authorization handler, which treats "expired", "never existed", and "not yours" identically — so
+all three deny the same way and none can be told apart. That is the stronger privacy property, so
+the tests assert indistinguishability rather than a status code. The cost is that an owner
+returning to their own expired file sees "Forbidden", worth revisiting in Phase 9 as a message
+problem rather than an authorization one.
 
 **What is left to settle:**
 

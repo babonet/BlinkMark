@@ -174,9 +174,7 @@ export function FileDetailPage() {
             expiresAt={file.expiresAt}
             maxExpiresAt={file.maxExpiresAt}
             retentionNotice={file.retentionNotice}
-            onChanged={(expiresAt, retentionNotice) =>
-              setFile({ ...file, expiresAt, retentionNotice })
-            }
+            onChanged={(expiresAt, retentionNotice) => setFile({ ...file, expiresAt, retentionNotice })}
           />
 
           <DownloadButton fileId={file.id} displayName={file.displayName} />

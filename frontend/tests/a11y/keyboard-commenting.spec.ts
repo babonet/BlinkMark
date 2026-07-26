@@ -17,7 +17,10 @@ test.describe('Keyboard-only commenting', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/files');
 
-    const firstFile = page.getByRole('link').filter({ hasText: /\.(md|html)$/ }).first();
+    const firstFile = page
+      .getByRole('link')
+      .filter({ hasText: /\.(md|html)$/ })
+      .first();
     test.skip((await firstFile.count()) === 0, 'No file available to comment on.');
     await firstFile.click();
 
@@ -113,7 +116,10 @@ test.describe('Orphaned comments', () => {
   test('orphaned state is conveyed in text, not by styling alone', async ({ page }) => {
     await page.goto('/files');
 
-    const firstFile = page.getByRole('link').filter({ hasText: /\.(md|html)$/ }).first();
+    const firstFile = page
+      .getByRole('link')
+      .filter({ hasText: /\.(md|html)$/ })
+      .first();
     test.skip((await firstFile.count()) === 0, 'No file available.');
     await firstFile.click();
 
@@ -123,8 +129,6 @@ test.describe('Orphaned comments', () => {
     // FR-079. The dashed border is a shortcut for sighted users; the requirement is that the
     // state exists for everyone, which means it has to be in the accessible name or the text.
     await expect(page.getByText(/can no longer be found/i).first()).toBeVisible();
-    await expect(
-      page.getByRole('article', { name: /orphaned/i }).first(),
-    ).toBeVisible();
+    await expect(page.getByRole('article', { name: /orphaned/i }).first()).toBeVisible();
   });
 });

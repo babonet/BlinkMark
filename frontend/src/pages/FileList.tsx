@@ -67,8 +67,8 @@ export function FileListPage() {
       <h1>My files</h1>
 
       <p>
-        {data.quota.liveFiles} of {data.quota.maxLiveFiles} live files. Expired files disappear on
-        their own and free up capacity.
+        {data.quota.liveFiles} of {data.quota.maxLiveFiles} live files. Expired files disappear on their own
+        and free up capacity.
       </p>
 
       {data.files.length === 0 ? (

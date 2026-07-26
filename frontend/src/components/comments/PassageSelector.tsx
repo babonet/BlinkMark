@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { createRegionAnchor, createTextAnchor, splitIntoBlocks, type ProjectionBlock } from '../../services/anchoring';
+import {
+  createRegionAnchor,
+  createTextAnchor,
+  splitIntoBlocks,
+  type ProjectionBlock,
+} from '../../services/anchoring';
 import type { Anchor } from '../../services/apiClient';
 
 interface PassageSelectorProps {
@@ -29,7 +34,12 @@ type Mode = 'pointer' | 'keyboard';
  * - **Region** — select a whole structural block. This is FR-082's non-dragging alternative: a
  *   figure or table gets commented on by choosing it, not by drawing a rectangle around it.
  */
-export function PassageSelector({ projection, renderVersion, onSelect, highlights = [] }: PassageSelectorProps) {
+export function PassageSelector({
+  projection,
+  renderVersion,
+  onSelect,
+  highlights = [],
+}: PassageSelectorProps) {
   const [blocks, setBlocks] = useState<ProjectionBlock[]>([]);
   const [mode, setMode] = useState<Mode>('pointer');
   const [focusedBlock, setFocusedBlock] = useState(0);
@@ -173,9 +183,7 @@ export function PassageSelector({ projection, renderVersion, onSelect, highlight
 
   /** FR-082 — comment on a whole block without dragging anything. */
   function selectRegion(block: ProjectionBlock) {
-    onSelect(
-      createRegionAnchor(projection, block.start, block.end, `block:${block.index}`, renderVersion),
-    );
+    onSelect(createRegionAnchor(projection, block.start, block.end, `block:${block.index}`, renderVersion));
     setStatus('Region selected. Write your comment.');
   }
 
@@ -197,9 +205,9 @@ export function PassageSelector({ projection, renderVersion, onSelect, highlight
       <h2 id="passages-heading">Document text</h2>
 
       <p id="passage-instructions">
-        Select a passage to comment on it. With a keyboard: move with the arrow keys, hold Shift to
-        extend the selection across blocks, and press Enter to comment. Each block also has a
-        “Comment on this block” button, so nothing here needs a drag.
+        Select a passage to comment on it. With a keyboard: move with the arrow keys, hold Shift to extend the
+        selection across blocks, and press Enter to comment. Each block also has a “Comment on this block”
+        button, so nothing here needs a drag.
       </p>
 
       {/*
@@ -210,6 +218,20 @@ export function PassageSelector({ projection, renderVersion, onSelect, highlight
         {status}
       </p>
 
+      {/*
+        The rule below wants an interactive role on this container, and the obvious candidate is
+        `listbox`. That would be the wrong answer: this is the document's prose, and announcing
+        someone's draft as "listbox, 42 items" with each paragraph as "option" misrepresents what
+        a screen-reader user is actually reading. Correct semantics for prose beat a clean lint
+        run.
+
+        What the rule protects against — interaction a keyboard cannot reach — does not apply
+        here. Every action has a keyboard path: the paragraphs carry a roving tabindex and handle
+        arrow keys, Shift extends, Enter commits, and each block also has a real button. The
+        handlers on this element delegate for children that are already focusable; they are not a
+        hidden click target.
+      */}
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div
         ref={containerRef}
         className="passage-list"
@@ -250,11 +272,7 @@ export function PassageSelector({ projection, renderVersion, onSelect, highlight
                 {block.text}
               </p>
 
-              <button
-                type="button"
-                className="secondary passage-action"
-                onClick={() => selectRegion(block)}
-              >
+              <button type="button" className="secondary passage-action" onClick={() => selectRegion(block)}>
                 Comment on this block
                 <span className="visually-hidden"> — {block.text.slice(0, 40)}</span>
               </button>

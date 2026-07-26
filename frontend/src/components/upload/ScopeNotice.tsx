@@ -17,12 +17,12 @@ export function ScopeNotice() {
       <ul>
         <li>
           <strong>Anyone in your organization with the link can open this file and comment on it.</strong>{' '}
-          There is no per-person access list — the link is the access grant, and a forwarded link works
-          just as well as the original.
+          There is no per-person access list — the link is the access grant, and a forwarded link works just
+          as well as the original.
         </li>
         <li>
-          <strong>It deletes itself after 24 hours</strong>, and can never be kept longer than 30 days
-          from upload. You can extend it up to that limit, or delete it sooner.
+          <strong>It deletes itself after 24 hours</strong>, and can never be kept longer than 30 days from
+          upload. You can extend it up to that limit, or delete it sooner.
         </li>
         <li>
           <strong>There is no backup.</strong> Once a file expires it is gone, along with its comments.

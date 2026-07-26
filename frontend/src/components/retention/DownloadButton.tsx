@@ -50,10 +50,10 @@ export function DownloadButton({ fileId, displayName }: DownloadButtonProps) {
       <h2 id="download-heading">Download</h2>
 
       <p id="download-notice">
-        Downloading gives you the file and every comment on it, including comments whose passage
-        has since been edited away. <strong>Your copy is not covered by BlinkMark&rsquo;s
-        retention</strong> — the file here still deletes itself on schedule, but your download will
-        not. Store it according to your organization&rsquo;s data policy.
+        Downloading gives you the file and every comment on it, including comments whose passage has since
+        been edited away. <strong>Your copy is not covered by BlinkMark&rsquo;s retention</strong> — the file
+        here still deletes itself on schedule, but your download will not. Store it according to your
+        organization&rsquo;s data policy.
       </p>
 
       <button

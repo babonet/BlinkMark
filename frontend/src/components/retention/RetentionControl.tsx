@@ -47,9 +47,7 @@ export function RetentionControl({
       onChanged(result.expiresAt, result.retentionNotice);
       setStatus(`This file now deletes itself on ${formatDate(result.expiresAt)}.`);
     } catch {
-      setError(
-        'That expiry could not be applied. A file can never be kept longer than 30 days from upload.',
-      );
+      setError('That expiry could not be applied. A file can never be kept longer than 30 days from upload.');
     } finally {
       setBusy(false);
     }
@@ -65,8 +63,8 @@ export function RetentionControl({
       {atCeiling ? (
         <p>
           This file is already set to its latest possible expiry,{' '}
-          <time dateTime={maxExpiresAt}>{formatDate(maxExpiresAt)}</time>. It cannot be kept any
-          longer — download a copy if you need one after that.
+          <time dateTime={maxExpiresAt}>{formatDate(maxExpiresAt)}</time>. It cannot be kept any longer —
+          download a copy if you need one after that.
         </p>
       ) : (
         <form onSubmit={handleSubmit}>
@@ -83,8 +81,8 @@ export function RetentionControl({
 
           <p id="retention-ceiling">
             The latest this file can be kept is{' '}
-            <time dateTime={maxExpiresAt}>{formatDate(maxExpiresAt)}</time>, 30 days after it was
-            uploaded. That limit cannot be raised by anyone.
+            <time dateTime={maxExpiresAt}>{formatDate(maxExpiresAt)}</time>, 30 days after it was uploaded.
+            That limit cannot be raised by anyone.
           </p>
 
           <button type="submit" disabled={busy}>

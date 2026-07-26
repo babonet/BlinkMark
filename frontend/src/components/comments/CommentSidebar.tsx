@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Anchor, Comment } from '../../services/apiClient';
 import { CommentBody } from './CommentBody';
 
@@ -74,6 +74,24 @@ export function CommentSidebar({
   const [editDraft, setEditDraft] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+
+  /*
+   * Focus the composer when a passage is selected.
+   *
+   * This replaces `autoFocus`, which jsx-a11y flags for good reason: it moves focus because a
+   * thing rendered, which from the user's side is focus moving on its own. Here focus moves
+   * because the user just selected a passage and asked to comment on it, and it moves to the
+   * field they asked for. That is the distinction the rule is really drawing, and it matters
+   * most for the keyboard path — without it, committing a selection would leave the user in the
+   * transcript with no indication that a composer had appeared somewhere else on the page.
+   */
+  useEffect(() => {
+    if (pendingAnchor) {
+      composerRef.current?.focus();
+    }
+  }, [pendingAnchor]);
+
   const threads = buildThreads(comments);
   const anchored = threads.filter((thread) => !thread.orphaned);
   const orphaned = threads.filter((thread) => thread.orphaned);
@@ -139,7 +157,10 @@ export function CommentSidebar({
           {comment.editedAt && <span className="comment-edited"> (edited)</span>}
           {comment.actingAgentId && (
             // FR-048. A human's name on a comment must not imply a human wrote it.
-            <span className="agent-badge" title={`Written by an agent on behalf of ${comment.authorDisplayName}`}>
+            <span
+              className="agent-badge"
+              title={`Written by an agent on behalf of ${comment.authorDisplayName}`}
+            >
               via agent
             </span>
           )}
@@ -195,8 +216,8 @@ export function CommentSidebar({
 
         {thread.orphaned && (
           <p className="orphan-note">
-            The passage this refers to can no longer be found in the document. The comment is kept
-            with the text it was written about.
+            The passage this refers to can no longer be found in the document. The comment is kept with the
+            text it was written about.
           </p>
         )}
 
@@ -224,7 +245,11 @@ export function CommentSidebar({
           </form>
         ) : (
           <button type="button" className="secondary" onClick={() => setReplyTo(thread.threadId)}>
-            Reply<span className="visually-hidden"> to the thread about “{thread.root.anchor.exact.slice(0, 40)}”</span>
+            Reply
+            <span className="visually-hidden">
+              {' '}
+              to the thread about “{thread.root.anchor.exact.slice(0, 40)}”
+            </span>
           </button>
         )}
       </li>
@@ -243,10 +268,10 @@ export function CommentSidebar({
           <label htmlFor="new-comment">Your comment</label>
           <textarea
             id="new-comment"
+            ref={composerRef}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             rows={3}
-            autoFocus
           />
           <button type="submit" disabled={busy || draft.trim().length === 0}>
             Comment
@@ -258,9 +283,7 @@ export function CommentSidebar({
       )}
 
       <section aria-labelledby="anchored-heading">
-        <h3 id="anchored-heading">
-          On the document ({anchored.length})
-        </h3>
+        <h3 id="anchored-heading">On the document ({anchored.length})</h3>
         {anchored.length === 0 ? (
           <p>No comments yet. Select a passage to start one.</p>
         ) : (
@@ -270,12 +293,10 @@ export function CommentSidebar({
 
       {orphaned.length > 0 && (
         <section aria-labelledby="orphaned-heading">
-          <h3 id="orphaned-heading">
-            Orphaned ({orphaned.length})
-          </h3>
+          <h3 id="orphaned-heading">Orphaned ({orphaned.length})</h3>
           <p>
-            These comments refer to passages that can no longer be found. They are kept here rather
-            than deleted or moved.
+            These comments refer to passages that can no longer be found. They are kept here rather than
+            deleted or moved.
           </p>
           <ul className="thread-list">{orphaned.map(renderThread)}</ul>
         </section>
