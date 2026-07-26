@@ -7,6 +7,8 @@ import { PassageSelector } from '../components/comments/PassageSelector';
 import { CommentSidebar } from '../components/comments/CommentSidebar';
 import { RetentionControl } from '../components/retention/RetentionControl';
 import { DownloadButton } from '../components/retention/DownloadButton';
+import { ShareBar } from '../components/share/ShareBar';
+import { isLocalDevAuth, localAccount } from '../services/localAuth';
 import { formatRemaining } from './FileList';
 
 /**
@@ -29,8 +31,15 @@ export function FileDetailPage() {
   const [pendingAnchor, setPendingAnchor] = useState<Anchor | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const currentUserId =
-    (instance.getActiveAccount()?.idTokenClaims as { oid?: string } | undefined)?.oid ?? '';
+  /** Which representation of the document is on screen. Text is the one you can work in. */
+  const [view, setView] = useState<'text' | 'rendered'>('text');
+
+  /** Owner-only: hide the owner controls to see what a reviewer sees. */
+  const [asReviewer, setAsReviewer] = useState(false);
+
+  const currentUserId = isLocalDevAuth
+    ? (localAccount().idTokenClaims.oid ?? '')
+    : ((instance.getActiveAccount()?.idTokenClaims as { oid?: string } | undefined)?.oid ?? '');
 
   const load = useCallback(async () => {
     if (!fileId) {
@@ -124,32 +133,69 @@ export function FileDetailPage() {
 
   return (
     <section>
-      <h1>{file.displayName}</h1>
+      <header className="file-header">
+        <h1>{file.displayName}</h1>
 
-      <p className="retention-notice">{file.retentionNotice}</p>
+        <p className="file-meta">
+          Uploaded by {file.ownerDisplayName}. Deletes itself{' '}
+          <time dateTime={file.expiresAt}>{formatRemaining(file.expiresAt)}</time>.
+        </p>
+      </header>
 
-      <p>
-        Uploaded by {file.ownerDisplayName}. Deletes itself{' '}
-        <time dateTime={file.expiresAt}>{formatRemaining(file.expiresAt)}</time>.
-      </p>
-
-      <p className="scope-notice">{file.accessScopeNotice}</p>
+      <ShareBar accessScopeNotice={file.accessScopeNotice} />
 
       <div className="file-layout">
         <div className="file-main">
-          <PreviewFrame
-            fileId={file.id}
-            displayName={file.displayName}
-            previewUrl={file.previewUrl}
-            onPreviewUrlChanged={(previewUrl) => setFile({ ...file, previewUrl })}
-          />
+          {/*
+            The text comes first, and the rendered preview is something you switch to.
+            That ordering is the opposite of the obvious one, and it is deliberate: the preview
+            is a cross-origin sandboxed iframe, so nothing in it can be selected or commented on.
+            Leading with it puts the one surface you cannot work in at the top of the page and
+            hides the one you can (research.md R2).
+          */}
+          <div className="view-switch" role="group" aria-label="How to view this document">
+            <button
+              type="button"
+              className={view === 'text' ? 'view-switch__option is-selected' : 'view-switch__option'}
+              aria-pressed={view === 'text'}
+              onClick={() => setView('text')}
+            >
+              Text
+              <span className="view-switch__hint">select passages and comment</span>
+            </button>
+            <button
+              type="button"
+              className={view === 'rendered' ? 'view-switch__option is-selected' : 'view-switch__option'}
+              aria-pressed={view === 'rendered'}
+              onClick={() => setView('rendered')}
+            >
+              Rendered
+              <span className="view-switch__hint">check formatting, read-only</span>
+            </button>
+          </div>
 
-          <PassageSelector
-            projection={projection}
-            renderVersion={renderVersion}
-            onSelect={setPendingAnchor}
-            highlights={highlights}
-          />
+          {view === 'text' ? (
+            <PassageSelector
+              projection={projection}
+              renderVersion={renderVersion}
+              onSelect={setPendingAnchor}
+              highlights={highlights}
+            />
+          ) : (
+            <>
+              <p className="view-note">
+                This is how the document renders. It is isolated in a sandbox so that nothing in it can reach
+                your session, which also means you cannot select text here — switch back to{' '}
+                <strong>Text</strong> to comment.
+              </p>
+              <PreviewFrame
+                fileId={file.id}
+                displayName={file.displayName}
+                previewUrl={file.previewUrl}
+                onPreviewUrlChanged={(previewUrl) => setFile({ ...file, previewUrl })}
+              />
+            </>
+          )}
         </div>
 
         <div id="comments" tabIndex={-1}>
@@ -166,22 +212,49 @@ export function FileDetailPage() {
       </div>
 
       {file.isOwner && (
-        <section aria-labelledby="owner-actions-heading">
-          <h2 id="owner-actions-heading">Owner actions</h2>
+        <section className="owner-actions" aria-labelledby="owner-actions-heading">
+          <div className="owner-actions__bar">
+            <h2 id="owner-actions-heading">Owner actions</h2>
 
-          <RetentionControl
-            fileId={file.id}
-            expiresAt={file.expiresAt}
-            maxExpiresAt={file.maxExpiresAt}
-            retentionNotice={file.retentionNotice}
-            onChanged={(expiresAt, retentionNotice) => setFile({ ...file, expiresAt, retentionNotice })}
-          />
+            {/*
+              Answers "what does a reviewer see?" without needing a second account. It hides the
+              owner-only controls and nothing else — it does not change permissions, and saying so
+              on the button matters, because a toggle that looked like impersonation would invite
+              exactly the wrong conclusion about what BlinkMark can enforce.
+            */}
+            <button
+              type="button"
+              className="secondary"
+              aria-pressed={asReviewer}
+              onClick={() => setAsReviewer(!asReviewer)}
+            >
+              {asReviewer ? 'Back to owner view' : 'See the reviewer view'}
+            </button>
+          </div>
 
-          <DownloadButton fileId={file.id} displayName={file.displayName} />
+          {asReviewer ? (
+            <p className="view-note">
+              Owner controls are hidden. This is what everyone else sees: the document, the comments, and no
+              way to change how long the file lives or to delete it. Their permissions are unchanged by this
+              toggle — it only hides the buttons.
+            </p>
+          ) : (
+            <>
+              <RetentionControl
+                fileId={file.id}
+                expiresAt={file.expiresAt}
+                maxExpiresAt={file.maxExpiresAt}
+                retentionNotice={file.retentionNotice}
+                onChanged={(expiresAt, retentionNotice) => setFile({ ...file, expiresAt, retentionNotice })}
+              />
 
-          <button type="button" className="secondary" onClick={() => void handleDelete()}>
-            Delete now
-          </button>
+              <DownloadButton fileId={file.id} displayName={file.displayName} />
+
+              <button type="button" className="danger" onClick={() => void handleDelete()}>
+                Delete now
+              </button>
+            </>
+          )}
         </section>
       )}
     </section>

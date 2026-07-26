@@ -1,3 +1,23 @@
+# NOT CURRENTLY USED. See specs/001-blinkmark-core/quickstart.md.
+#
+# To run BlinkMark locally, use `dotnet run --project backend/tools/BlinkMark.LocalHost`. It needs
+# no containers at all.
+#
+# This file is kept because the emulators below are genuinely useful for testing the *adapters* —
+# the Cosmos queries, the blob expiry, the table writes — which the in-memory host by definition
+# does not exercise. But it cannot currently run the application, and the reason is worth
+# recording rather than rediscovering:
+#
+#   Azurite and the Cosmos emulator authenticate with account keys. Every client in
+#   BlinkMark.Infrastructure is constructed from an endpoint plus DefaultAzureCredential, because
+#   every deployed resource has local authentication disabled and would refuse a key
+#   (Principle VII). There is therefore no code path that can talk to these containers, and
+#   adding one would mean building the key-based authentication that the whole design exists to
+#   avoid.
+#
+# Closing that gap means either the emulators growing usable AAD support, or a deliberate
+# adapter-level test seam. It does not mean adding connection strings.
+#
 # Local development only.
 #
 # Nothing here is a credential for a real resource. The emulators below use their published,

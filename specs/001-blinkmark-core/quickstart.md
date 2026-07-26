@@ -13,14 +13,11 @@ that will bite if you skip them.
 |---|---|---|
 | .NET SDK | 9.0+ | API, preview host, jobs |
 | Node.js | 22 LTS | React frontend |
-| Azure CLI | latest | Provisioning, Entra app registration |
-| Azure Developer CLI (`azd`) | latest | One-command environment |
-| Docker | latest | Local Redis, Cosmos and Azurite emulators |
+| Azure CLI | latest | Only for deploying |
+| Azure Developer CLI (`azd`) | latest | Only for deploying |
 
-An Azure subscription and permission to register an application in the tenant. **No admin consent
-is required**: BlinkMark requests only delegated `User.Read`, which each user consents to for
-themselves. Notifications are delivered in-app rather than by email precisely so that no
-admin-consented permission is needed (research.md R9).
+**Nothing above is needed to run BlinkMark locally except .NET and Node.** No Docker, no Azure
+subscription, no Entra app registration, and no network connection.
 
 ---
 
@@ -28,13 +25,62 @@ admin-consented permission is needed (research.md R9).
 
 ```powershell
 git clone <repo> ; cd BlinkMark
-docker compose up -d          # Redis, Azurite, Cosmos emulator
-dotnet restore
-cd frontend ; npm install ; cd ..
-cp .env.example .env          # then fill in the Entra values below
+dotnet build
+npm --prefix frontend ci
 ```
 
-### Entra app registration
+Then two terminals:
+
+```powershell
+dotnet run --project backend/tools/BlinkMark.LocalHost   # API + preview origin
+npm --prefix frontend run dev                            # http://localhost:5173
+```
+
+Open <http://localhost:5173> and you are signed in. That is everything.
+
+### What the local host actually is
+
+`BlinkMark.LocalHost` is a project that is **never deployed**. It calls `ApiHost.ConfigureServices`
+and `ApiHost.ConfigurePipeline` — the same methods `BlinkMark.Api/Program.cs` calls — and then
+replaces the Azure adapters with the in-memory ones the backend test suite already runs against.
+Every endpoint, every authorization policy, the sanitizer, the renderer, the anchoring algorithm,
+the retention rules and the middleware order are the real ones.
+
+Two things are not real, and it is worth knowing exactly which:
+
+- **Storage is in memory.** Everything is lost when the process exits. For a product whose whole
+  premise is that content does not stick around, this is arguably the most faithful part.
+- **Tokens are signed with a local symmetric key** by `GET /dev/token`, instead of by Entra.
+
+**Authentication itself is not faked.** The local host mints genuine JWTs and the production
+authentication handler validates them in full — signature, issuer, audience, lifetime, tenant,
+scope, and the app-only refusal in FR-055. A stub handler would have been less code and would
+have switched off precisely the behaviour you most want to try by hand.
+
+```powershell
+# Be someone else — this is how to watch ownership actually being enforced
+curl "http://localhost:5080/dev/token?user=bob"
+
+# An agent acting on a user's behalf, for checking attribution in the audit trail
+curl "http://localhost:5080/dev/token?user=alice&agent=blinkmark-local-agent"
+```
+
+To use the frontend as a different person, change `VITE_LOCAL_DEV_USER` in
+`frontend/.env.development` and reload.
+
+### The preview really is a separate origin
+
+The API serves on `http://localhost:5080` and the preview on `http://127.0.0.1:5081`. Those are
+different origins to a browser even though they are the same machine, so Principle IV is enforced
+locally by the same-origin policy rather than by convention — no hosts file, no external DNS, and
+a sanitizer bypass you find locally lands somewhere with no access to the application's tokens.
+
+### Deployed-only prerequisites
+
+An Azure subscription and permission to register an application in the tenant, needed only to
+deploy. **No admin consent is required**: BlinkMark requests only delegated `User.Read`, which
+each user consents to for themselves. Notifications are delivered in-app rather than by email
+precisely so that no admin-consented permission is needed (research.md R9).
 
 Two registrations, not one:
 
@@ -50,42 +96,16 @@ entire burden on application code.
 Neither registration may hold a client secret or certificate. The API's ability to perform the
 On-Behalf-Of exchange comes from a federated identity credential backed by the managed identity.
 
-### Run
-
-```powershell
-dotnet run --project backend/src/BlinkMark.Api        # https://localhost:7001
-dotnet run --project backend/src/BlinkMark.Preview    # https://localhost:7002  ← separate host
-cd frontend ; npm run dev                             # http://localhost:5173
-```
-
-**The preview host must run on a different hostname, not just a different port.** Same-host
-different-port still shares an origin for some purposes and will let you build something locally
-that violates Principle IV in production. Add to your hosts file:
-
-```
-127.0.0.1  blinkmark.localtest.me
-127.0.0.1  preview.blinkmark.localtest.me
-```
-
 ---
 
 ## Verify the walking skeleton
 
 ```powershell
-# 1. Upload
-curl -H "Authorization: Bearer $env:TOKEN" -F "file=@sample.md" https://blinkmark.localtest.me:7001/api/files
-
-# 2. Preview — note the previewUrl is on the preview host, never the API host
-curl -H "Authorization: Bearer $env:TOKEN" https://blinkmark.localtest.me:7001/api/files/{id}
-
-# 3. Comment
-curl -H "Authorization: Bearer $env:TOKEN" -H "Content-Type: application/json" `
-  -d '{"body":"tighten this","anchor":{"kind":"text","exact":"lorem ipsum","renderVersion":"1"}}' `
-  https://blinkmark.localtest.me:7001/api/files/{id}/comments
-
-# 4. Presence
-curl -N -H "Authorization: Bearer $env:TOKEN" https://blinkmark.localtest.me:7001/api/files/{id}/presence
+pwsh tools/local-smoke.ps1
 ```
+
+Eighteen checks against the running host, covering the four below and the rest of the
+authorization, retention, commenting, preview-isolation and sanitization rules.
 
 ### The four checks that matter
 
@@ -93,8 +113,8 @@ Run these before believing anything works:
 
 1. **Unauthenticated request returns nothing.** `curl` any endpoint with no token. You should get
    401 with no filename, no metadata, no hint the file exists (FR-001).
-2. **Script does not execute.** Upload `tests/fixtures/hostile/inline-script.html` and open the
-   preview. If an alert fires, stop and fix it before writing another line (FR-013, SC-008).
+2. **Script does not execute.** Upload `backend/tests/fixtures/hostile/inline-script.html` and open
+   the preview. If an alert fires, stop and fix it before writing another line (FR-013, SC-008).
 3. **Expiry actually deletes.** Set a file's expiry to two minutes out, wait, then confirm the
    blob is gone from storage — not merely hidden from the API (FR-031, SC-006).
 4. **The ceiling holds.** `PATCH` retention to 31 days out. It must be refused, and the existing

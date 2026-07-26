@@ -1,5 +1,6 @@
 import { Configuration, LogLevel, PublicClientApplication } from '@azure/msal-browser';
 import { config } from '../config';
+import { acquireLocalAccessToken, isLocalDevAuth } from './localAuth';
 
 /**
  * MSAL configuration.
@@ -56,6 +57,13 @@ export const loginRequest = {
  * silent path genuinely cannot succeed.
  */
 export async function acquireAccessToken(): Promise<string> {
+  // Local development short-circuits to the local host's token endpoint. The token it returns is
+  // a real JWT and is validated by the real handler; only the issuer differs. See localAuth.ts
+  // for why this cannot be reached from a production build.
+  if (isLocalDevAuth) {
+    return acquireLocalAccessToken();
+  }
+
   const account = msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0];
 
   if (!account) {

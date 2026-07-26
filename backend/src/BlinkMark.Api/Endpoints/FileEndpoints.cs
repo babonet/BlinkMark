@@ -238,6 +238,18 @@ public static class FileEndpoints
             return Results.NotFound();
         }
 
+        // The structured view is derived from the stored render rather than stored separately, so
+        // there is no second artifact to keep in step and no migration for files uploaded before
+        // it existed. Both projections come from the same sanitized HTML, which is what keeps
+        // their offsets in agreement (DocumentProjectionTests).
+        var html = await blobs
+            .ReadTextAsync(file.Id, BlobArtifact.Render, file.RenderVersion, cancellationToken)
+            .ConfigureAwait(false);
+
+        var blocks = html is null
+            ? []
+            : DocumentProjection.Project(html).Select(DocumentBlockResponse.From).ToList();
+
         await audit.RecordAsync(
             context,
             AuditAction.View,
@@ -252,6 +264,7 @@ public static class FileEndpoints
             ContentType = file.ContentType.ToString().ToLowerInvariant(),
             RenderVersion = file.RenderVersion,
             Text = text,
+            Blocks = blocks,
             ExpiresAt = file.ExpiresAt,
         });
     }

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { expectAppRendered } from '../support/appReady';
 
 /**
  * Keyboard-only passage selection and commenting (T053, FR-078, FR-082).
@@ -16,6 +17,10 @@ import AxeBuilder from '@axe-core/playwright';
 test.describe('Keyboard-only commenting', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/files');
+
+    // Before the skip below. "No file available" and "the page never rendered" both produce an
+    // empty list, and only one of them is a legitimate reason to skip an accessibility test.
+    await expectAppRendered(page);
 
     const firstFile = page
       .getByRole('link')
@@ -115,6 +120,7 @@ test.describe('Keyboard-only commenting', () => {
 test.describe('Orphaned comments', () => {
   test('orphaned state is conveyed in text, not by styling alone', async ({ page }) => {
     await page.goto('/files');
+    await expectAppRendered(page);
 
     const firstFile = page
       .getByRole('link')

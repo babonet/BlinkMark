@@ -1,6 +1,7 @@
 import { MsalProvider, AuthenticatedTemplate, UnauthenticatedTemplate, useMsal } from '@azure/msal-react';
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { msalInstance, loginRequest } from './services/authConfig';
+import { isLocalDevAuth, localAccount } from './services/localAuth';
 import { UploadPage } from './pages/Upload';
 import { FileListPage } from './pages/FileList';
 import { FileDetailPage } from './pages/FileDetail';
@@ -15,6 +16,19 @@ import { PreferencesPage } from './pages/Preferences';
  * have no unauthenticated surface at all.
  */
 export function App() {
+  // In local development the identity comes from the local host rather than Entra, so MSAL's
+  // templates would show a sign-in prompt that can never be satisfied. The shell itself is
+  // identical either way — there is no local-only route and no local-only surface.
+  if (isLocalDevAuth) {
+    return (
+      <MsalProvider instance={msalInstance}>
+        <BrowserRouter>
+          <AuthenticatedShell />
+        </BrowserRouter>
+      </MsalProvider>
+    );
+  }
+
   return (
     <MsalProvider instance={msalInstance}>
       <BrowserRouter>
@@ -31,7 +45,7 @@ export function App() {
 
 function AuthenticatedShell() {
   const { instance } = useMsal();
-  const account = instance.getActiveAccount();
+  const account = isLocalDevAuth ? localAccount() : instance.getActiveAccount();
 
   return (
     <div className="app-shell">
@@ -65,9 +79,15 @@ function AuthenticatedShell() {
 
         <div className="app-account">
           <span>{account?.name ?? account?.username}</span>
-          <button type="button" onClick={() => void instance.logoutRedirect()}>
-            Sign out
-          </button>
+          {isLocalDevAuth ? (
+            <span className="local-badge" title="Identity comes from the local host, not Entra">
+              local
+            </span>
+          ) : (
+            <button type="button" onClick={() => void instance.logoutRedirect()}>
+              Sign out
+            </button>
+          )}
         </div>
       </header>
 

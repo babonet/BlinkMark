@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { expectAppRendered } from '../support/appReady';
 
 /**
  * Accessibility over the US1 flows (T050).
@@ -16,6 +17,7 @@ import AxeBuilder from '@axe-core/playwright';
 test.describe('Upload flow', () => {
   test('has no automatically detectable accessibility violations', async ({ page }) => {
     await page.goto('/upload');
+    await expectAppRendered(page);
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -69,6 +71,8 @@ test.describe('Preview region', () => {
   });
 
   test('the file list has no automatically detectable accessibility violations', async ({ page }) => {
+    await expectAppRendered(page);
+
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
@@ -76,7 +80,7 @@ test.describe('Preview region', () => {
     expect(results.violations).toEqual([]);
   });
 
-  test('the preview region is labelled, focusable, and escapable', async ({ page }) => {
+  test('the preview region is labelled and focusable', async ({ page }) => {
     const firstFile = page
       .getByRole('link')
       .filter({ hasText: /\.(md|html)$/ })
@@ -85,17 +89,41 @@ test.describe('Preview region', () => {
 
     await firstFile.click();
 
+    // The rendered preview is not the default view. Text is, because the preview is a sandboxed
+    // cross-origin frame and nothing in it can be selected or commented on.
+    await page.getByRole('button', { name: /^Rendered/ }).click();
+
     const region = page.getByRole('group', { name: /preview of/i });
     await expect(region).toBeVisible();
+  });
 
-    await region.focus();
-    await expect(region).toBeFocused();
+  test('the text view is what a reader lands on', async ({ page }) => {
+    const firstFile = page
+      .getByRole('link')
+      .filter({ hasText: /\.(md|html)$/ })
+      .first();
+    test.skip((await firstFile.count()) === 0, 'No file available.');
 
-    // Escape returns focus to the wrapper rather than leaving the user stranded inside the frame.
-    await page.keyboard.press('Escape');
-    await expect(region).toBeFocused();
+    await firstFile.click();
 
-    // And the skip link offers a way past the preview entirely.
+    // The regression this guards against is leading with the one surface a reviewer cannot work
+    // in, which is what the layout did originally.
+    await expect(page.getByRole('button', { name: /^Text/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('heading', { name: /document text/i })).toBeVisible();
+    await expect(page.getByRole('group', { name: /preview of/i })).toHaveCount(0);
+  });
+
+  test('the preview can be skipped entirely', async ({ page }) => {
+    const firstFile = page
+      .getByRole('link')
+      .filter({ hasText: /\.(md|html)$/ })
+      .first();
+    test.skip((await firstFile.count()) === 0, 'No file available.');
+
+    await firstFile.click();
+    await page.getByRole('button', { name: /^Rendered/ }).click();
+
+    // FR-081. An iframe sits in the tab order, so there has to be a way past it.
     await expect(page.getByRole('link', { name: /skip preview and go to comments/i })).toBeAttached();
   });
 });

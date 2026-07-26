@@ -1,4 +1,5 @@
 using BlinkMark.Core.Models;
+using BlinkMark.Core.Rendering;
 
 namespace BlinkMark.Api.Contracts;
 
@@ -130,5 +131,45 @@ public sealed record FileContentResponse
     /// </remarks>
     public required string Text { get; init; }
 
+    /// <summary>
+    /// The same document, described as structure the client can render.
+    /// </summary>
+    /// <remarks>
+    /// Data, not markup. Each block carries a type from a closed set, a level, and text — never
+    /// an element, an attribute, or a URL — so a reviewer can read and comment on a document that
+    /// looks like a document without any uploaded HTML reaching the application origin
+    /// (Principle IV). Offsets index into <see cref="Text"/>, so a comment made here and a comment
+    /// made by an agent reading the flat text address the same characters.
+    /// </remarks>
+    public required IReadOnlyList<DocumentBlockResponse> Blocks { get; init; }
+
     public required DateTimeOffset ExpiresAt { get; init; }
+}
+
+/// <summary>One block of a document.</summary>
+public sealed record DocumentBlockResponse
+{
+    /// <summary>One of: paragraph, heading, listItem, quote, code, tableCell.</summary>
+    public required string Type { get; init; }
+
+    /// <summary>Heading level 1-6, or zero.</summary>
+    public required int Level { get; init; }
+
+    public required bool Ordered { get; init; }
+
+    public required string Text { get; init; }
+
+    public required int Start { get; init; }
+
+    public required int End { get; init; }
+
+    public static DocumentBlockResponse From(DocumentBlock block) => new()
+    {
+        Type = char.ToLowerInvariant(block.Type.ToString()[0]) + block.Type.ToString()[1..],
+        Level = block.Level,
+        Ordered = block.Ordered,
+        Text = block.Text,
+        Start = block.Start,
+        End = block.End,
+    };
 }

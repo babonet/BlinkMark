@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { stubLocalIdentity } from '../support/appReady';
 
 /**
  * A preview reloaded after its token expired must recover silently (T128).
@@ -12,6 +13,10 @@ import { test, expect } from '@playwright/test';
  * "report a problem".
  */
 test.describe('Preview token renewal', () => {
+  test.beforeEach(async ({ page }) => {
+    await stubLocalIdentity(page);
+  });
+
   test('a 401 from the preview origin is re-minted rather than surfaced', async ({ page }) => {
     let previewRequests = 0;
     let metadataRequests = 0;
@@ -47,6 +52,9 @@ test.describe('Preview token renewal', () => {
     test.skip((await firstFile.count()) === 0, 'No file available to preview.');
 
     await firstFile.click();
+
+    // The rendered preview lives behind the view switch; Text is what a reader lands on.
+    await page.getByRole('button', { name: /^Rendered/ }).click();
 
     // The reader sees content, and never an authentication failure.
     await expect(page.getByRole('group', { name: /preview of/i })).toBeVisible();

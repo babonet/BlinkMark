@@ -46,6 +46,13 @@ test-results/
 .env
 .env.*
 !.env.example
+
+# The frontend's local development settings are committed deliberately. Every value in them is a
+# localhost address or an obvious placeholder, and the SPA is a public client that holds no secret
+# by design — so there is nothing there to leak, and committing it means `npm run dev` works from
+# a clean clone. `.env.local` remains ignored above for anything personal.
+!frontend/.env.development
+
 *.pfx
 *.p12
 *.pem

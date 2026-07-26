@@ -211,7 +211,7 @@ export function CommentSidebar({
 
   function renderThread(thread: Thread) {
     return (
-      <li key={thread.threadId}>
+      <li key={thread.threadId} className="thread">
         <blockquote className="comment-quote">{thread.root.anchor.exact}</blockquote>
 
         {thread.orphaned && (
@@ -222,10 +222,26 @@ export function CommentSidebar({
         )}
 
         {renderComment(thread.root, thread.orphaned)}
-        {thread.replies.map((reply) => renderComment(reply, thread.orphaned))}
+
+        {/*
+          Replies are a nested list, not a flat continuation. The indentation is the cheap part;
+          the reason it is a <ul> is that a screen-reader user gets "list, 3 items" and knows the
+          shape of the conversation without having to infer it from the order, which is exactly
+          what the visual indent gives everyone else.
+        */}
+        {thread.replies.length > 0 && (
+          <ul
+            className="reply-list"
+            aria-label={`${thread.replies.length} repl${thread.replies.length === 1 ? 'y' : 'ies'}`}
+          >
+            {thread.replies.map((reply) => (
+              <li key={reply.id}>{renderComment(reply, thread.orphaned)}</li>
+            ))}
+          </ul>
+        )}
 
         {replyTo === thread.threadId ? (
-          <form onSubmit={(event) => void handleReply(event, thread)}>
+          <form className="reply-form" onSubmit={(event) => void handleReply(event, thread)}>
             <label htmlFor={`reply-${thread.threadId}`} className="visually-hidden">
               Reply to this thread
             </label>

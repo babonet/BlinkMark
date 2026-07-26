@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Local development host.
+
+    This project is NEVER deployed. It exists so that the in-memory adapters and the local token
+    issuer live outside BlinkMark.Api, which means the production container physically cannot run
+    without real storage or mint its own access tokens - the code is not in the image.
+
+    That is a stronger guarantee than a configuration flag. A flag can be set by accident; a type
+    that was never compiled into the artifact cannot be reached at all.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BlinkMark.LocalHost</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsPublishable>false</IsPublishable>
+    <UserSecretsId>blinkmark-local-host</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\BlinkMark.Api\BlinkMark.Api.csproj" />
+    <ProjectReference Include="..\..\src\BlinkMark.Preview\BlinkMark.Preview.csproj" />
+    <ProjectReference Include="..\..\tests\testhost\BlinkMark.TestHost.csproj" />
+  </ItemGroup>
+
+</Project>
