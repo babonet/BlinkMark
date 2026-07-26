@@ -93,28 +93,30 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
 
-      # Two tiers, because "is this code a risk to a user" and "is this code a risk to us" are
-      # different questions with different answers.
+      # Two tiers, because "is this a risk to a user" and "is this a risk to us" are different
+      # questions with different answers.
       #
       # Shipped dependencies are what lands in a browser, so an advisory there is a live exposure
-      # and blocks the build with no exceptions.
+      # and blocks the build. The gate is per-advisory rather than per-severity: `--audit-level`
+      # cannot tell a high-severity issue in unreachable code from a moderate one on the hot path,
+      # and raising the threshold to go green silences both. Anything not reviewed in
+      # frontend/audit-exceptions.json fails here.
       #
       # The dev tree is audited too — a compromised build-time dependency runs on developer
-      # machines and in CI with credentials, which is precisely how the eslint and event-stream
+      # machines and in CI with credentials, which is exactly how the eslint and event-stream
       # incidents worked — but it is reported rather than blocking. As of 2026-07-26 the
       # brace-expansion advisory (GHSA-mh99-v99m-4gvg) affects *every published version* and the
       # whole ESLint and typescript-eslint tree depends on it, so there is no version of this
       # repository that can pass a blocking full-tree audit. Wedging CI on an advisory with no
       # available fix trains people to ignore it; leaving it visible does not.
       #
-      # REVISIT when brace-expansion ships a patched release: delete this comment, drop
-      # continue-on-error, and collapse the two steps back into one.
-      - name: Dependency vulnerability scan (shipped dependencies)
-        run: npm audit --omit=dev --audit-level=moderate
+      # REVISIT when brace-expansion ships a patched release: drop continue-on-error below.
+      - name: Dependency audit (shipped dependencies)
+        run: npm audit --json --omit=dev | node scripts/audit-gate.mjs --scope="shipped dependencies"
 
-      - name: Dependency vulnerability scan (full tree, advisory only)
+      - name: Dependency audit (full tree, advisory only)
         continue-on-error: true
-        run: npm audit --audit-level=moderate
+        run: npm audit --json | node scripts/audit-gate.mjs --scope="all dependencies"
 
       - run: npm run lint
       - run: npm run format:check

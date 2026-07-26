@@ -25,6 +25,18 @@ playwright-report/
 test-results/
 .vite/
 
+# Azure Artifacts feed configuration.
+#
+# BlinkMark is a public repository built by GitHub Actions, which has no Azure DevOps credentials.
+# A committed .npmrc pointing at an internal feed would fail `npm ci` on every pull request while
+# buying nothing: Central Feed Services scans production repositories in Azure DevOps, and its
+# documented path for a GitHub-hosted repository is to build in an ADO pipeline that writes this
+# file at build time from an AZURE_ARTIFACTS_FEED variable.
+#
+# Developers still get feed-gated installs locally — see frontend/.npmrc, which is ignored, not
+# absent. Revisit this entry when BlinkMark gains an ADO pipeline.
+.npmrc
+
 # ---------------------------------------------------------------------------
 # Environment and anything that could carry a credential
 #

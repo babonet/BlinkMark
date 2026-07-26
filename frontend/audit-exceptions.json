@@ -1,0 +1,27 @@
+{
+  "$comment": [
+    "Advisories that have been reviewed and found not to apply to BlinkMark.",
+    "",
+    "This file exists so that 'the audit is green' and 'we looked at every advisory' can both be",
+    "true at once. Lowering --audit-level, or adding --omit to hide a package, would make the",
+    "first true and quietly abandon the second.",
+    "",
+    "An entry is only legitimate when the vulnerable code path cannot be reached from this",
+    "application at all. 'Probably fine', 'low exploitability' and 'we'll fix it later' are not",
+    "reasons — they are reasons to upgrade. Every entry carries an expiry so that a judgement made",
+    "today has to be made again rather than inherited forever, and audit-gate.mjs fails the build",
+    "on an expired entry exactly as it would on a new advisory."
+  ],
+
+  "exceptions": [
+    {
+      "advisory": "https://github.com/advisories/GHSA-qwww-vcr4-c8h2",
+      "package": "react-router",
+      "severity": "high",
+      "title": "RSC Mode CSRF Bypass Allows Action Execution Before 400 Response",
+      "reason": "Requires React Router's RSC (React Server Components) mode. BlinkMark's frontend is a client-only SPA: it mounts BrowserRouter in main.tsx, has no server renderer, no RSC entry point, and no router actions. The vulnerable code path is not bundled and cannot be invoked. Accepted in preference to the alternative, which is to stay on a version carrying GHSA-wrjc-x8rr-h8h6 — an open redirect in <Link> and useNavigate that this application genuinely does reach.",
+      "reviewed": "2026-07-26",
+      "expires": "2026-10-26"
+    }
+  ]
+}

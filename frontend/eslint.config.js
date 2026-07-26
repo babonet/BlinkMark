@@ -79,8 +79,19 @@ export default [
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
   {
-    // Build and tooling configuration runs in Node, not in a browser.
-    files: ['vite.config.ts', 'playwright.config.ts', 'eslint.config.js'],
+    // Build and tooling code runs in Node, not in a browser.
+    files: [
+      'vite.config.ts',
+      'vitest.config.ts',
+      'playwright.config.ts',
+      'eslint.config.js',
+      'scripts/**/*.mjs',
+    ],
     languageOptions: { globals: { ...globals.node } },
+    rules: {
+      // Tooling talks to the operator through stdout; that is its interface, not a stray debug
+      // statement left behind.
+      'no-console': 'off',
+    },
   },
 ];
