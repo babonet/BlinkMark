@@ -62,7 +62,7 @@ public sealed record UploadValidationResult
 /// choice would be a guess about what the uploader meant, and one of the guesses is dangerous.
 /// </para>
 /// </remarks>
-public sealed class UploadValidator(long maxSizeBytes = 10 * 1024 * 1024)
+public sealed class UploadValidator(long maxSizeBytes = 20 * 1024 * 1024)
 {
     private static readonly string[] HtmlExtensions = [".html", ".htm"];
     private static readonly string[] MarkdownExtensions = [".md", ".markdown"];

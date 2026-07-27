@@ -24,7 +24,7 @@ coordination state that must never be persisted.
 | `id` | string (ULID) | System-generated. Also the blob name. Never derived from the upload filename (FR-008). |
 | `displayName` | string | Original filename, display only (FR-009). Sanitized for rendering; never used as a path. |
 | `contentType` | enum | `html` \| `markdown` |
-| `sizeBytes` | number | ≤ 10 MB (FR-007) |
+| `sizeBytes` | number | ≤ 20 MB (FR-007) |
 | `ownerId` | string | Entra object ID. Indexed for the owner's file list (FR-011). |
 | `ownerDisplayName` | string | Denormalized to avoid a directory lookup per list row. |
 | `uploadedAt` | string (ISO 8601 UTC) | Immutable. |

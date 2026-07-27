@@ -4,7 +4,7 @@ import { ApiError, apiClient, type QuotaStatus } from '../services/apiClient';
 import { ScopeNotice } from '../components/upload/ScopeNotice';
 
 const ACCEPTED_EXTENSIONS = '.html,.htm,.md,.markdown';
-const MAX_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_SIZE_BYTES = 20 * 1024 * 1024;
 
 /**
  * The upload screen (T046).
@@ -36,7 +36,7 @@ export function UploadPage() {
     }
 
     if (candidate.size > MAX_SIZE_BYTES) {
-      return 'That file is larger than the 10 MB limit.';
+      return 'That file is larger than the 20 MB limit.';
     }
 
     if (candidate.size === 0) {
@@ -101,7 +101,7 @@ export function UploadPage() {
               setError(null);
             }}
           />
-          <p id="file-input-help">Up to 10 MB. The file is rendered safely — scripts never run.</p>
+          <p id="file-input-help">Up to 20 MB. The file is rendered safely — scripts never run.</p>
         </div>
 
         {error && (

@@ -2,6 +2,7 @@ using BlinkMark.Api.Auth;
 using BlinkMark.Api.Endpoints;
 using BlinkMark.Api.Middleware;
 using BlinkMark.Infrastructure.Configuration;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.OpenApi.Models;
 
@@ -29,6 +30,8 @@ public static class ApiHost
         builder.Services.AddBlinkMarkInfrastructure(builder.Configuration);
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<AuditService>();
+
+        ConfigureRequestLimits(builder);
 
         builder.Services.AddBlinkMarkAuthentication(builder.Configuration);
         builder.Services.AddBlinkMarkAuthorization();
@@ -84,6 +87,49 @@ public static class ApiHost
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
             options.KnownNetworks.Clear();
             options.KnownProxies.Clear();
+        });
+    }
+
+    /// <summary>
+    /// Ties the transport's request limits to the configured upload limit.
+    /// </summary>
+    /// <remarks>
+    /// Kestrel refuses a body over 30 MB by default and the form reader refuses a multipart body
+    /// over 128 MB. Both sat silently above the 10 MB upload limit, so nothing was wrong — and
+    /// nothing said so either. Raising the upload limit to 20 MB left one of those defaults only
+    /// 43% clear of it, and the next raise would cross it.
+    /// <para>
+    /// Crossing it fails badly rather than obviously: Kestrel aborts the request before any
+    /// application code runs, so the uploader gets a bare 413 instead of
+    /// <c>UploadValidator</c>'s message naming the limit and the actual size. Deriving the
+    /// transport limit from the configured one keeps them in step and keeps the explanation
+    /// coming from the place that knows the reason.
+    /// </para>
+    /// <para>
+    /// The headroom covers multipart framing — boundaries, part headers, the filename — which is
+    /// a few hundred bytes in practice. It is deliberately not generous: this is the last line
+    /// before an unbounded request body, and <c>UploadValidator</c> is what should be doing the
+    /// refusing.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureRequestLimits(WebApplicationBuilder builder)
+    {
+        const long MultipartFramingHeadroom = 64 * 1024;
+
+        var maxUploadBytes =
+            builder.Configuration.GetValue<long?>($"{BlinkMarkOptions.SectionName}:Upload:MaxSizeBytes")
+            ?? new UploadOptions().MaxSizeBytes;
+
+        var maxRequestBytes = maxUploadBytes + MultipartFramingHeadroom;
+
+        builder.Services.Configure<FormOptions>(options =>
+        {
+            options.MultipartBodyLengthLimit = maxRequestBytes;
+        });
+
+        builder.WebHost.ConfigureKestrel(options =>
+        {
+            options.Limits.MaxRequestBodySize = maxRequestBytes;
         });
     }
 

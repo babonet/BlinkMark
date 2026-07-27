@@ -34,7 +34,8 @@ and render artifacts); Table Storage (audit); Redis Basic C0 (transient coordina
 region `eastus`, tenant `72f988bf-86f1-41af-91ab-2d7cd011db47`
 **Project Type**: Web application — React frontend plus .NET backend
 **Performance Goals**: p95 preview start <1 s; p95 comment create and list <300 ms; p95 upload
-acknowledgement <2 s at 10 MB; presence propagation <5 s
+acknowledgement <2 s at 10 MB (the accepted limit is 20 MB; 10 MB remains the measurement point,
+so raising the limit did not silently tighten this target); presence propagation <5 s
 **Constraints**: 500 concurrent users; stateless horizontally scalable services; content encrypted
 at rest and in transit; no unauthenticated path to any content or metadata; 30-day absolute
 retention ceiling; WCAG 2.1 Level AA; best-effort availability with no DR and no backup; **no

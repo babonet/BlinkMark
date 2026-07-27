@@ -180,7 +180,7 @@ public sealed class EntraOptions
 public sealed class UploadOptions
 {
     /// <summary>FR-007.</summary>
-    public long MaxSizeBytes { get; set; } = 10 * 1024 * 1024;
+    public long MaxSizeBytes { get; set; } = 20 * 1024 * 1024;
 
     public string[] AllowedExtensions { get; set; } = [".html", ".htm", ".md", ".markdown"];
 }
