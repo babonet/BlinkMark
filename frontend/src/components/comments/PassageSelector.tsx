@@ -16,6 +16,10 @@ interface PositionedBlock extends DocumentBlock {
   index: number;
 }
 
+/** Consecutive list items render inside one list; everything else stands alone. */
+type BlockGroup =
+  { kind: 'list'; ordered: boolean; blocks: PositionedBlock[] } | { kind: 'single'; block: PositionedBlock };
+
 type Mode = 'pointer' | 'keyboard';
 
 /**
@@ -254,7 +258,7 @@ export function PassageSelector({
 
       case 'listItem':
         return (
-          <div {...props} role="listitem">
+          <div {...props}>
             <span aria-hidden="true" className="doc-bullet">
               {block.ordered ? `${listNumberFor(block)}.` : '•'}
             </span>
@@ -280,6 +284,83 @@ export function PassageSelector({
     return number;
   }
 
+  /**
+   * Groups consecutive list items so they can be wrapped in a single list.
+   *
+   * `role="listitem"` without a `role="list"` ancestor is invalid ARIA, and axe rates it
+   * critical for a good reason: the items are not announced as a list at all, so a screen-reader
+   * user is told neither that a list has started nor how many items are in it. The visible
+   * bullets said "list" to everyone except the people relying on the semantics.
+   */
+  function groupBlocks(all: PositionedBlock[]): BlockGroup[] {
+    const groups: BlockGroup[] = [];
+
+    for (const block of all) {
+      const previous = groups.at(-1);
+
+      if (block.type === 'listItem') {
+        // A run continues only while the ordered-ness matches; a bulleted list following a
+        // numbered one is two lists, not one.
+        if (previous?.kind === 'list' && previous.ordered === block.ordered) {
+          previous.blocks.push(block);
+          continue;
+        }
+
+        groups.push({ kind: 'list', ordered: block.ordered, blocks: [block] });
+        continue;
+      }
+
+      groups.push({ kind: 'single', block });
+    }
+
+    return groups;
+  }
+
+  /** One block, with the action beside it. */
+  function renderRow(block: PositionedBlock, inList: boolean) {
+    const highlight = highlightFor(block);
+    const selected = isSelected(block.index);
+
+    return (
+      <div
+        key={block.index}
+        className="passage-row"
+        // The row is the list item, not the text inside it, so that the "Comment on this block"
+        // button belongs to the item rather than sitting loose inside the list.
+        role={inList ? 'listitem' : undefined}
+      >
+        {renderBlockContent(block, {
+          ref: (element: HTMLElement | null) => {
+            blockRefs.current[block.index] = element;
+          },
+          'data-block-index': block.index,
+          tabIndex: block.index === focusedBlock ? 0 : -1,
+          className: [
+            'passage',
+            `passage--${block.type}`,
+            selected ? 'passage--selected' : '',
+            highlight ? 'passage--commented' : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+          /*
+            The commented state is announced, not just shown. FR-079 forbids conveying it by
+            visual highlight alone, and a highlight is exactly what a sighted user gets.
+          */
+          'aria-current': block.index === focusedBlock && mode === 'keyboard' ? 'true' : undefined,
+          'aria-label': highlight
+            ? `${block.text} — ${highlight.commentCount} comment${highlight.commentCount === 1 ? '' : 's'} on this passage`
+            : undefined,
+        })}
+
+        <button type="button" className="secondary passage-action" onClick={() => selectRegion(block)}>
+          Comment on this block
+          <span className="visually-hidden"> — {block.text.slice(0, 40)}</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <section aria-labelledby="passages-heading">
       {/*
@@ -299,8 +380,13 @@ export function PassageSelector({
       {/*
         A polite live region. Selection changes are worth announcing and never worth interrupting
         with, and moving focus on every arrow press would fight the user (FR-080's reasoning).
+
+        Identified rather than anonymous. There are several polite regions on this page — the
+        share bar has one too — and "the first live region in the document" is a description that
+        changes whenever the layout does. It did, and the keyboard tests started reading an empty
+        element while the announcements themselves were working perfectly.
       */}
-      <p aria-live="polite" className="visually-hidden">
+      <p id="passage-status" aria-live="polite" className="visually-hidden">
         {status}
       </p>
 
@@ -325,43 +411,20 @@ export function PassageSelector({
         onMouseUp={handlePointerSelection}
         onKeyDown={handleKeyDown}
       >
-        {blocks.map((block) => {
-          const highlight = highlightFor(block);
-          const selected = isSelected(block.index);
-
-          return (
-            <div key={block.index} className="passage-row">
-              {renderBlockContent(block, {
-                ref: (element: HTMLElement | null) => {
-                  blockRefs.current[block.index] = element;
-                },
-                'data-block-index': block.index,
-                tabIndex: block.index === focusedBlock ? 0 : -1,
-                className: [
-                  'passage',
-                  `passage--${block.type}`,
-                  selected ? 'passage--selected' : '',
-                  highlight ? 'passage--commented' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' '),
-                /*
-                  The commented state is announced, not just shown. FR-079 forbids conveying it by
-                  visual highlight alone, and a highlight is exactly what a sighted user gets.
-                */
-                'aria-current': block.index === focusedBlock && mode === 'keyboard' ? 'true' : undefined,
-                'aria-label': highlight
-                  ? `${block.text} — ${highlight.commentCount} comment${highlight.commentCount === 1 ? '' : 's'} on this passage`
-                  : undefined,
-              })}
-
-              <button type="button" className="secondary passage-action" onClick={() => selectRegion(block)}>
-                Comment on this block
-                <span className="visually-hidden"> — {block.text.slice(0, 40)}</span>
-              </button>
+        {groupBlocks(blocks).map((group) =>
+          group.kind === 'list' ? (
+            <div
+              key={`list-${group.blocks[0].index}`}
+              role="list"
+              className="doc-list"
+              aria-label={`${group.ordered ? 'Numbered' : 'Bulleted'} list, ${group.blocks.length} items`}
+            >
+              {group.blocks.map((block) => renderRow(block, true))}
             </div>
-          );
-        })}
+          ) : (
+            renderRow(group.block, false)
+          ),
+        )}
       </div>
     </section>
   );

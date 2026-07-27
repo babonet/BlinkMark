@@ -123,8 +123,8 @@ export function PreviewFrame({ fileId, displayName, previewUrl, onPreviewUrlChan
 
       <p id="preview-instructions" className="visually-hidden">
         This preview is a separate document. Tab moves into it and continues out the other side; the skip link
-        above jumps straight to the comments. Nothing here can be selected — switch to the Text view to read
-        the same content as selectable prose and comment on it.
+        above jumps straight to the comments. Nothing here can be selected — the document above this panel
+        holds the same content as selectable prose, and is where comments are written.
       </p>
 
       <a className="skip-link" href="#comments">

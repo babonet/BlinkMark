@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { stubLocalIdentity } from '../support/appReady';
+import { createFile } from '../support/fixtures';
 
 /**
  * A preview reloaded after its token expired must recover silently (T128).
@@ -13,11 +14,17 @@ import { stubLocalIdentity } from '../support/appReady';
  * "report a problem".
  */
 test.describe('Preview token renewal', () => {
-  test.beforeEach(async ({ page }) => {
-    await stubLocalIdentity(page);
-  });
-
-  test('a 401 from the preview origin is re-minted rather than surfaced', async ({ page }) => {
+  /*
+   * No identity stub here.
+   *
+   * `stubLocalIdentity` answers /dev/token with a placeholder, which was right when these tests
+   * never reached a real API. They do now — the file is created through it — and a placeholder
+   * token is rejected by the real authentication handler, so the document never loads and the
+   * failure points at the preview rather than at the stub that caused it.
+   *
+   * The local host answers /dev/token with a genuine token, so there is nothing left to stub.
+   */
+  test('a 401 from the preview origin is re-minted rather than surfaced', async ({ page, request }) => {
     let previewRequests = 0;
     let metadataRequests = 0;
 
@@ -43,18 +50,17 @@ test.describe('Preview token renewal', () => {
       await route.continue();
     });
 
-    await page.goto('/files');
+    await page.goto(`/files/${await createFile(request)}`);
 
-    const firstFile = page
-      .getByRole('link')
-      .filter({ hasText: /\.(md|html)$/ })
-      .first();
-    test.skip((await firstFile.count()) === 0, 'No file available to preview.');
-
-    await firstFile.click();
+    // Wait for the document itself before reaching for the disclosure. The route interception
+    // above delays the metadata request, and clicking at a fixed moment races it.
+    await expect(page.locator('.passage').first()).toBeVisible();
 
     // The rendered preview is behind a disclosure; the document itself is what a reader lands on.
-    await page.getByRole('group', { name: /see exactly how this file renders/i }).click();
+    await page
+      .locator('summary')
+      .filter({ hasText: /see exactly how this file renders/i })
+      .click();
 
     // The reader sees content, and never an authentication failure.
     await expect(page.getByRole('group', { name: /preview of/i })).toBeVisible();
@@ -65,6 +71,11 @@ test.describe('Preview token renewal', () => {
   });
 
   test('a genuinely unavailable file reports plainly instead of retrying forever', async ({ page }) => {
+    // This one never reaches the API — every response is stubbed — so the identity stub is still
+    // the right tool. Without it the page would fetch a token from a host this test does not
+    // otherwise need.
+    await stubLocalIdentity(page);
+
     await page.route('**/api/files/*', async (route) => {
       await route.fulfill({
         status: 404,

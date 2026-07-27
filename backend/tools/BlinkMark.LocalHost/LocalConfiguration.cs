@@ -61,6 +61,17 @@ public static class LocalConfiguration
 
         // Application Insights is off; a local run should not emit telemetry anywhere.
         ["ApplicationInsights:ConnectionString"] = string.Empty,
+
+        // Generous quotas, for this host only.
+        //
+        // The production limits are 20 uploads an hour and 50 live files, and they work — the
+        // accessibility suite hit them within minutes once each test began creating its own file
+        // rather than sharing one. That is the rate limiter doing its job, and lowering it in
+        // production to accommodate a test harness would be the wrong way round. The limits
+        // themselves are covered properly by the backend integration tests, which control the
+        // clock and assert the refusal.
+        ["BlinkMark:Quotas:MaxUploadsPerWindow"] = "10000",
+        ["BlinkMark:Quotas:MaxLiveFilesPerUser"] = "10000",
     };
 
     public static Dictionary<string, string?> PreviewSettings()

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { expectAppRendered } from '../support/appReady';
+import { createFile } from '../support/fixtures';
 
 /**
  * Keyboard-only passage selection and commenting (T053, FR-078, FR-082).
@@ -15,19 +16,14 @@ import { expectAppRendered } from '../support/appReady';
  */
 
 test.describe('Keyboard-only commenting', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/files');
+  test.beforeEach(async ({ page, request }) => {
+    // A file of its own, per test. Sharing one meant every run added comments to it until axe
+    // timed out analysing the page — a failure that looked like an accessibility regression and
+    // was nothing of the sort. See tests/support/fixtures.ts.
+    const fileId = await createFile(request);
 
-    // Before the skip below. "No file available" and "the page never rendered" both produce an
-    // empty list, and only one of them is a legitimate reason to skip an accessibility test.
+    await page.goto(`/files/${fileId}`);
     await expectAppRendered(page);
-
-    const firstFile = page
-      .getByRole('link')
-      .filter({ hasText: /\.(md|html)$/ })
-      .first();
-    test.skip((await firstFile.count()) === 0, 'No file available to comment on.');
-    await firstFile.click();
 
     await expect(page.locator('.passage').first()).toBeVisible();
   });
@@ -41,6 +37,12 @@ test.describe('Keyboard-only commenting', () => {
   });
 
   test('a passage can be selected and commented on without a pointer', async ({ page }) => {
+    // Unique per run. These tests write real comments to a real file, and the file outlives the
+    // run — so asserting on fixed text passes once and then fails on a strict-mode violation
+    // when the second run finds three of them. A test that only works on a clean database is a
+    // test that gets deleted the first time somebody is in a hurry.
+    const body = `Written entirely from the keyboard. ${crypto.randomUUID()}`;
+
     const passages = page.locator('.passage');
     await passages.first().focus();
 
@@ -52,21 +54,21 @@ test.describe('Keyboard-only commenting', () => {
     const composer = page.getByLabel('Your comment');
     await expect(composer).toBeFocused();
 
-    await page.keyboard.type('Written entirely from the keyboard.');
+    await page.keyboard.type(body);
 
     // Tab to the submit button rather than clicking it.
     await page.keyboard.press('Tab');
     await expect(page.locator(':focus')).toHaveText(/^Comment$/);
     await page.keyboard.press('Enter');
 
-    await expect(page.getByText('Written entirely from the keyboard.')).toBeVisible();
+    await expect(page.getByText(body)).toBeVisible();
   });
 
   test('selection changes are announced politely and do not move focus away', async ({ page }) => {
     const passages = page.locator('.passage');
     await passages.first().focus();
 
-    const liveRegion = page.locator('[aria-live="polite"]').first();
+    const liveRegion = page.locator('#passage-status');
     await page.keyboard.press('ArrowDown');
 
     // FR-080's reasoning: announce, never steal focus. A user pressing arrow keys must stay
@@ -82,7 +84,7 @@ test.describe('Keyboard-only commenting', () => {
     await page.keyboard.press('Shift+ArrowDown');
     await page.keyboard.press('Escape');
 
-    await expect(page.locator('[aria-live="polite"]').first()).toContainText(/cleared/i);
+    await expect(page.locator('#passage-status')).toContainText(/cleared/i);
     await expect(page.locator(':focus')).toHaveClass(/passage/);
   });
 
@@ -97,37 +99,39 @@ test.describe('Keyboard-only commenting', () => {
   });
 
   test('a comment thread can be replied to from the keyboard', async ({ page }) => {
+    const root = `Root comment. ${crypto.randomUUID()}`;
+    const reply = `Replied from the keyboard. ${crypto.randomUUID()}`;
+
     const passages = page.locator('.passage');
     await passages.first().focus();
     await page.keyboard.press('Enter');
 
-    await page.getByLabel('Your comment').fill('Root comment.');
+    await page.getByLabel('Your comment').fill(root);
     await page.getByRole('button', { name: /^Comment$/ }).click();
 
-    const replyButton = page.getByRole('button', { name: /^Reply/ }).first();
-    await replyButton.focus();
+    // The thread just created, found by its own text rather than by position. Ordering is by
+    // creation time, so "first" and "last" both drift as earlier runs leave threads behind.
+    const thread = page.locator('.thread').filter({ hasText: root });
+    await expect(thread).toBeVisible();
+
+    await thread.getByRole('button', { name: /^Reply/ }).focus();
     await page.keyboard.press('Enter');
 
-    const replyBox = page.getByLabel('Reply to this thread');
+    const replyBox = thread.getByLabel('Reply to this thread');
     await expect(replyBox).toBeVisible();
-    await replyBox.fill('Replied from the keyboard.');
+    await replyBox.fill(reply);
 
-    await page.getByRole('button', { name: /^Reply$/ }).click();
-    await expect(page.getByText('Replied from the keyboard.')).toBeVisible();
+    await thread.getByRole('button', { name: /^Reply$/ }).click();
+    await expect(page.getByText(reply)).toBeVisible();
   });
 });
 
 test.describe('Orphaned comments', () => {
-  test('orphaned state is conveyed in text, not by styling alone', async ({ page }) => {
+  test('orphaned state is conveyed in text, not by styling alone', async ({ page, request }) => {
     await page.goto('/files');
     await expectAppRendered(page);
 
-    const firstFile = page
-      .getByRole('link')
-      .filter({ hasText: /\.(md|html)$/ })
-      .first();
-    test.skip((await firstFile.count()) === 0, 'No file available.');
-    await firstFile.click();
+    await page.goto(`/files/${await createFile(request)}`);
 
     const orphanSection = page.getByRole('heading', { name: /orphaned/i });
     test.skip((await orphanSection.count()) === 0, 'No orphaned comments on this file.');

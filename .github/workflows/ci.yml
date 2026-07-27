@@ -124,8 +124,37 @@ jobs:
       - run: npm test
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+
+      # The browser suites need a running BlinkMark, and until now CI had none — so every test
+      # that required a file skipped itself, the run went green, and the keyboard-commenting
+      # suite proved nothing. Twenty-one of thirty-two tests were skipping. A suite that silently
+      # tests nothing is worse than a red one, because it reports coverage that never happened.
+      #
+      # BlinkMark.LocalHost is the same application with in-memory adapters and a local token
+      # issuer. It is never deployed; see backend/tools/BlinkMark.LocalHost.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Start BlinkMark locally
+        working-directory: .
+        run: |
+          dotnet run --project backend/tools/BlinkMark.LocalHost &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:5080/health > /dev/null; then
+              echo "API is up."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "The local host did not start within two minutes."
+          exit 1
+
       - name: Accessibility and end-to-end tests
+        env:
+          PLAYWRIGHT_API_ORIGIN: http://localhost:5080
         run: npm run test:e2e
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:

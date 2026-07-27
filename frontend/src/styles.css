@@ -240,11 +240,31 @@ td {
  * reviewer actually selects from (research.md R2).
  * ------------------------------------------------------------------------ */
 
+/*
+ * The file page uses the whole window.
+ *
+ * Everywhere else keeps a comfortable measure, because a file list or a settings form gains
+ * nothing from being 2000px wide. A document under review is the exception: it is the thing the
+ * reader is here for, and margins that make sense around a form are wasted space around it.
+ *
+ * Deliberately uncapped rather than clamped to a reading measure. Long lines are harder to read,
+ * so the escape hatch is under the reader's control instead of the stylesheet's: hiding the
+ * comments widens the document, and a narrower window narrows it.
+ */
+main:has(.file-page) {
+  max-width: none;
+}
+
 .file-layout {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(20rem, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
   gap: 1.5rem;
   align-items: start;
+}
+
+/* Comments hidden: the document takes everything. */
+.file-layout--wide {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @media (max-width: 60rem) {
@@ -256,13 +276,29 @@ td {
 /* --- Page header ------------------------------------------------------- */
 
 .file-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--colour-border);
   padding-bottom: 0.75rem;
   margin-bottom: 1rem;
 }
 
+.file-header__title {
+  min-width: 0;
+}
+
+.file-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .file-header h1 {
-  margin-bottom: 0.25rem;
+  margin: 0 0 0.25rem;
   overflow-wrap: anywhere;
 }
 
@@ -271,45 +307,52 @@ td {
   color: var(--colour-text-muted);
 }
 
+.count-badge {
+  background: var(--colour-accent);
+  color: var(--colour-accent-text);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  min-width: 1.25rem;
+  padding: 0 0.35rem;
+  text-align: center;
+}
+
 /* --- Share ------------------------------------------------------------- */
 
 .share-bar {
-  border: 1px solid var(--colour-border);
-  border-radius: var(--radius);
-  padding: 0.4rem 0.6rem;
-  margin-bottom: 1.25rem;
-  background: #f7f9fb;
-}
-
-.share-row {
   display: flex;
-  gap: 0.5rem;
   align-items: center;
+  gap: 0.6rem;
   flex-wrap: wrap;
 }
 
-.share-row input {
-  flex: 0 1 20rem;
-  min-width: 0;
-  font: inherit;
-  font-size: 0.82rem;
-  padding: 0.25rem 0.5rem;
-  border: 1px solid var(--colour-border);
-  border-radius: var(--radius);
-  background: #ffffff;
-  color: var(--colour-text-muted);
-}
-
-/* Sits on the same line as the link when there is room, and wraps beneath when there is not. */
+/*
+ * The scope notice is capped so it reads as a caption beside the button rather than a paragraph.
+ * It is not hidden and not truncated: FR-057 makes this the mitigation for having no per-person
+ * access list, so it has to be legible without any further interaction.
+ */
 .share-scope {
-  flex: 1 1 18rem;
+  max-width: 26rem;
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   line-height: 1.35;
   border: none;
   background: none;
   padding: 0;
   color: var(--colour-text-muted);
+}
+
+.share-fallback {
+  flex: 1 1 100%;
+}
+
+.share-fallback input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
 }
 
 /* --- Buttons ------------------------------------------------------------ */

@@ -15,6 +15,7 @@ import { CommentSidebar } from '../components/comments/CommentSidebar';
 import { RetentionControl } from '../components/retention/RetentionControl';
 import { DownloadButton } from '../components/retention/DownloadButton';
 import { ShareBar } from '../components/share/ShareBar';
+import { CommentIcon } from '../components/icons/Icons';
 import { isLocalDevAuth, localAccount } from '../services/localAuth';
 import { formatRemaining } from './FileList';
 
@@ -41,6 +42,9 @@ export function FileDetailPage() {
 
   /** The exact rendering is opt-in; it costs a preview token and a cross-origin frame to show. */
   const [showRendering, setShowRendering] = useState(false);
+
+  /** Comments can be put away so the document has the full width. */
+  const [showComments, setShowComments] = useState(true);
 
   /** Owner-only: hide the owner controls to see what a reviewer sees. */
   const [asReviewer, setAsReviewer] = useState(false);
@@ -82,6 +86,17 @@ export function FileDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * Selecting a passage always brings the comments back.
+   *
+   * Without this, choosing a passage while comments are hidden would open a composer the user
+   * cannot see, and the selection would look as though it had done nothing.
+   */
+  function handleSelectPassage(anchor: Anchor) {
+    setPendingAnchor(anchor);
+    setShowComments(true);
+  }
 
   async function handleCreate(body: string, anchor: Anchor, parentId?: string) {
     if (!fileId) return;
@@ -140,20 +155,47 @@ export function FileDetailPage() {
       commentCount: comments.filter((other) => other.threadId === comment.threadId).length,
     }));
 
-  return (
-    <section>
-      <header className="file-header">
-        <h1>{file.displayName}</h1>
+  const liveComments = comments.filter((comment) => comment.deletedAt === null).length;
 
-        <p className="file-meta">
-          Uploaded by {file.ownerDisplayName}. Deletes itself{' '}
-          <time dateTime={file.expiresAt}>{formatRemaining(file.expiresAt)}</time>.
-        </p>
+  return (
+    <section className="file-page">
+      <header className="file-header">
+        <div className="file-header__title">
+          <h1>{file.displayName}</h1>
+
+          <p className="file-meta">
+            Uploaded by {file.ownerDisplayName}. Deletes itself{' '}
+            <time dateTime={file.expiresAt}>{formatRemaining(file.expiresAt)}</time>.
+          </p>
+        </div>
+
+        <div className="file-header__actions">
+          <ShareBar accessScopeNotice={file.accessScopeNotice} />
+
+          {/*
+            Hiding the comments gives the document the whole width, which is the point: reading a
+            long draft and reading the discussion about it are different activities, and the
+            second does not need to be on screen during the first.
+
+            aria-expanded rather than aria-pressed. The button controls the visibility of a region
+            that exists in the document, which is what aria-expanded describes; aria-pressed would
+            say this is a setting rather than a disclosure.
+          */}
+          <button
+            type="button"
+            className="compact"
+            aria-expanded={showComments}
+            aria-controls="comments"
+            onClick={() => setShowComments(!showComments)}
+          >
+            <CommentIcon />
+            {showComments ? 'Hide comments' : 'Show comments'}
+            {liveComments > 0 && <span className="count-badge">{liveComments}</span>}
+          </button>
+        </div>
       </header>
 
-      <ShareBar accessScopeNotice={file.accessScopeNotice} />
-
-      <div className="file-layout">
+      <div className={showComments ? 'file-layout' : 'file-layout file-layout--wide'}>
         <div className="file-main">
           {/*
             One document, not two views of it. An earlier version put a "Text" tab beside the
@@ -171,7 +213,7 @@ export function FileDetailPage() {
             projection={projection}
             blocks={blocks}
             renderVersion={renderVersion}
-            onSelect={setPendingAnchor}
+            onSelect={handleSelectPassage}
             highlights={highlights}
           />
 
@@ -196,7 +238,13 @@ export function FileDetailPage() {
           </details>
         </div>
 
-        <div id="comments" tabIndex={-1}>
+        {/*
+          Kept in the DOM when hidden, rather than unmounted. The skip link at the top of the
+          preview points at #comments, and a target that disappears turns that link into a dead
+          end. Hidden with the `hidden` attribute, so it is out of the tab order and out of the
+          accessibility tree too — not merely invisible.
+        */}
+        <div id="comments" tabIndex={-1} hidden={!showComments}>
           <CommentSidebar
             comments={comments}
             currentUserId={currentUserId}
